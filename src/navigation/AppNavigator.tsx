@@ -11,13 +11,16 @@ import SafetyScreen from '../screens/modules/SafetyScreen';
 import LabourScreen from '../screens/modules/LabourScreen';
 import CleansingScreen from '../screens/modules/CleansingScreen';
 import RfiScreen from '../screens/modules/RfiScreen';
+import OverviewScreen from '../screens/projects/OverviewScreen';
 import TeamScreen from '../screens/modules/TeamScreen';
 import SettingsScreen from '../screens/modules/SettingsScreen';
+import AskAIScreen from '../screens/modules/AskAIScreen';
 
 export type AppStackParamList = {
   Company: undefined;
   Projects: undefined;
   ProjectDashboard: { projectId: string; projectName: string };
+  Overview: { projectId: string; projectName: string };
   Diary: { projectId: string; projectName: string };
   Safety: { projectId: string; projectName: string };
   Labour: { projectId: string; projectName: string };
@@ -25,6 +28,7 @@ export type AppStackParamList = {
   Rfi: { projectId: string; projectName: string };
   Team: { projectId: string; projectName: string };
   Settings: { projectId: string; projectName: string };
+  AskAI: { projectId: string; projectName: string };
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -49,6 +53,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="ProjectDashboard"
         component={ProjectDashboardScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Overview"
+        component={OverviewScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
@@ -84,6 +93,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="AskAI"
+        component={AskAIScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>
