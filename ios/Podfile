@@ -30,5 +30,30 @@ target 'MatrixTwinAPP' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |cfg|
+        # Fix non-modular-include-in-framework-module errors for RNGestureHandler, RNScreens, RNReanimated on device
+        cfg.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        cfg.build_settings['DEFINES_MODULE'] = 'NO'
+      end
+    end
+    installer.pods_project.save
+
+    # MMKV v3 uses crc32 from zlib.
+    # The main app linker reads the Pods-MatrixTwinAPP xcconfig files, so we
+    # patch them directly (pbxproj build-setting changes do not propagate there).
+    ['debug', 'release'].each do |config_name|
+      xcconfig_path = File.join(
+        installer.sandbox.root,
+        'Target Support Files',
+        'Pods-MatrixTwinAPP',
+        "Pods-MatrixTwinAPP.#{config_name}.xcconfig"
+      )
+      next unless File.exist?(xcconfig_path)
+      content = File.read(xcconfig_path)
+      next if content.include?('-lz')
+      content.gsub!(/^(OTHER_LDFLAGS\s*=.*)$/, '\1 -lz')
+      File.write(xcconfig_path, content)
+    end
   end
 end

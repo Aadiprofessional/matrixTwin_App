@@ -1,0 +1,10 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "npm install": true,
+        "pod": true,
+        "npx react-native": true,
+        "xcrun": true,
+        "xcodebuild": true,
+        "/usr/libexec/PlistBuddy": true
+    }
+}
