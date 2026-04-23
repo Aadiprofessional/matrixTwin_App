@@ -1,8 +1,11 @@
 import axios from 'axios';
+import { API_BASE_URL as ENV_API_BASE_URL, REACT_APP_API_BASE_URL } from '@env';
 import { storage } from '../utils/storage';
 
 // Same backend as the web app
-export const API_BASE_URL = 'https://server.matrixtwin.com/api';
+export const API_BASE_URL =
+  ENV_API_BASE_URL?.trim() ||
+  (REACT_APP_API_BASE_URL?.trim() ? `${REACT_APP_API_BASE_URL.trim()}/api` : 'https://server.matrixtwin.com/api');
 
 const client = axios.create({
   baseURL: API_BASE_URL,

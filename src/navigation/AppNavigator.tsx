@@ -15,6 +15,7 @@ import OverviewScreen from '../screens/projects/OverviewScreen';
 import TeamScreen from '../screens/modules/TeamScreen';
 import SettingsScreen from '../screens/modules/SettingsScreen';
 import AskAIScreen from '../screens/modules/AskAIScreen';
+import FormsScreen from '../screens/modules/FormsScreen';
 
 export type AppStackParamList = {
   Company: undefined;
@@ -29,6 +30,7 @@ export type AppStackParamList = {
   Team: { projectId: string; projectName: string };
   Settings: { projectId: string; projectName: string };
   AskAI: { projectId: string; projectName: string };
+  Forms: { projectId: string; projectName: string };
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -100,7 +102,11 @@ export default function AppNavigator() {
         component={AskAIScreen}
         options={{ animation: 'slide_from_right' }}
       />
+      <Stack.Screen
+        name="Forms"
+        component={FormsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
     </Stack.Navigator>
   );
 }
-

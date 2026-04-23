@@ -8,12 +8,13 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
-import { getDiaryEntries, createDiaryEntry } from '../../api/diary';
+import { getDiaryEntries } from '../../api/diary';
 import { useAuthStore } from '../../store/authStore';
 import ModuleShell from './ModuleShell';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 import client from '../../api/client';
+import { getProjectMembers, TeamMember } from '../../api/team';
 
 type RouteProps = RouteProp<AppStackParamList, 'Diary'>;
 const ACCENT = '#0ea5e9';
@@ -32,6 +33,21 @@ interface FullEntry {
   materials_delivered: string; notes: string; status: string; created_at: string;
   diary_workflow_nodes?: WorkflowNode[]; diary_comments?: Comment[];
   current_node_index?: number; created_by?: string; name?: string;
+}
+
+interface SaveProcessNode {
+  id: string;
+  type: 'start' | 'node' | 'end';
+  name: string;
+  executor?: string;
+  executorId?: string;
+  ccRecipients?: TeamMember[];
+  editAccess: boolean;
+  settings: Record<string, unknown>;
+}
+
+function generateDiaryFormNumber() {
+  return `DY-${dayjs().format('YYYYMMDD-HHmmss')}`;
 }
 
 function statusColor(s: string) {
@@ -70,6 +86,24 @@ export default function DiaryScreen() {
   const [incidents, setIncidents] = useState('');
   const [materials, setMaterials] = useState('');
   const [notes, setNotes] = useState('');
+  const [diaryName, setDiaryName] = useState('');
+  const [expiryAt, setExpiryAt] = useState(dayjs().add(10, 'day').format('YYYY-MM-DDTHH:mm'));
+  const [projectMembers, setProjectMembers] = useState<TeamMember[]>([]);
+  const [reviewerId, setReviewerId] = useState<string>('');
+
+  useEffect(() => {
+    const loadMembers = async () => {
+      try {
+        const members = await getProjectMembers(projectId);
+        setProjectMembers(Array.isArray(members) ? members : []);
+      } catch (error) {
+        console.error('Failed to load project members for diary workflow:', error);
+        setProjectMembers([]);
+      }
+    };
+
+    loadMembers();
+  }, [projectId]);
 
   const fetchEntries = useCallback(async () => {
     if (!user) return;
@@ -138,9 +172,45 @@ export default function DiaryScreen() {
 
   const handleCreate = async () => {
     if (!user || !workCompleted.trim()) { Alert.alert('Validation', 'Work Completed is required.'); return; }
+    if (!diaryName.trim()) { Alert.alert('Validation', 'Diary name is required.'); return; }
+    if (!expiryAt.trim() || !dayjs(expiryAt).isValid()) { Alert.alert('Validation', 'A valid expiry date is required.'); return; }
     setSubmitting(true);
     try {
-      await createDiaryEntry({ date, project_id: projectId, weather, temperature, work_completed: workCompleted, incidents_reported: incidents, materials_delivered: materials, notes });
+      const selectedReviewer = projectMembers.find(member => member.id === reviewerId);
+      const formNumber = generateDiaryFormNumber();
+      const processNodes: SaveProcessNode[] = [
+        { id: 'start', type: 'start', name: 'Start', editAccess: true, settings: {} },
+        {
+          id: 'review',
+          type: 'node',
+          name: 'Review & Approval',
+          executor: selectedReviewer?.name || '',
+          executorId: selectedReviewer?.id || '',
+          ccRecipients: [],
+          editAccess: true,
+          settings: {},
+        },
+        { id: 'end', type: 'end', name: 'Complete', editAccess: false, settings: {} },
+      ];
+
+      await client.post('/diary/create', {
+        formData: {
+          formNumber,
+          date,
+          weather,
+          temperature,
+          work_completed: workCompleted,
+          incidents_reported: incidents,
+          materials_delivered: materials,
+          notes,
+        },
+        processNodes,
+        createdBy: user.id,
+        projectId,
+        formId: formNumber,
+        name: diaryName.trim(),
+        expiresAt: dayjs(expiryAt).toISOString(),
+      });
       setShowCreate(false); resetForm(); fetchEntries();
       Alert.alert('Success', 'Diary entry created successfully!');
     } catch (e: any) { Alert.alert('Error', e?.response?.data?.message || 'Failed to create entry'); }
@@ -150,6 +220,9 @@ export default function DiaryScreen() {
   const resetForm = () => {
     setDate(dayjs().format('YYYY-MM-DD')); setWeather('Sunny'); setTemperature('');
     setWorkCompleted(''); setIncidents(''); setMaterials(''); setNotes('');
+    setDiaryName('');
+    setExpiryAt(dayjs().add(10, 'day').format('YYYY-MM-DDTHH:mm'));
+    setReviewerId('');
   };
 
   const filtered = entries
@@ -336,7 +409,24 @@ export default function DiaryScreen() {
                 <TouchableOpacity onPress={() => { setShowCreate(false); resetForm(); }}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
+                <FF label="Diary Name *"><TextInput style={S.input} value={diaryName} onChangeText={setDiaryName} placeholder="e.g. Main Tower Daily Log" placeholderTextColor={colors.textMuted} /></FF>
                 <FF label="Date *"><TextInput style={S.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} /></FF>
+                <FF label="Expiry *"><TextInput style={S.input} value={expiryAt} onChangeText={setExpiryAt} placeholder="YYYY-MM-DDTHH:mm" placeholderTextColor={colors.textMuted} /></FF>
+                <FF label="Reviewer">
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={S.chipRow}>
+                      {projectMembers.map(member => (
+                        <TouchableOpacity
+                          key={member.id}
+                          style={[S.chip, reviewerId === member.id && { backgroundColor: ACCENT, borderColor: ACCENT }]}
+                          onPress={() => setReviewerId(current => current === member.id ? '' : member.id)}>
+                          <Text style={[S.chipText, reviewerId === member.id && { color: '#fff' }]}>{member.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  <Text style={S.helperText}>Matches the website workflow payload with a review-and-approval node.</Text>
+                </FF>
                 <FF label="Weather">
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}><View style={S.chipRow}>
                     {WEATHER_OPTIONS.map(w => <TouchableOpacity key={w} style={[S.chip, weather===w && { backgroundColor:ACCENT, borderColor:ACCENT }]} onPress={() => setWeather(w)}><Text style={[S.chipText, weather===w && { color:'#fff' }]}>{w}</Text></TouchableOpacity>)}
@@ -441,6 +531,7 @@ const S = StyleSheet.create({
   chipRow: { flexDirection:'row', gap:spacing.xs },
   chip: { borderRadius:radius.full, borderWidth:1, borderColor:colors.border, paddingHorizontal:spacing.md, paddingVertical:6 },
   chipText: { color:colors.textMuted, fontSize:11, fontWeight:'700' },
+  helperText: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs, lineHeight: 16 },
   submitBtn: { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:spacing.xs, borderRadius:radius.lg, padding:spacing.md, marginTop:spacing.md },
   submitText: { color:'#fff', fontSize:15, fontWeight:'700' },
 });

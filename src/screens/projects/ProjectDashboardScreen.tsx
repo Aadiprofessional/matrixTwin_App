@@ -79,6 +79,14 @@ const NAV_MODULES: NavModule[] = [
     accentColor: '#10b981',
   },
   {
+    key: 'Forms',
+    label: 'Forms',
+    icon: 'file-document-multiple-outline',
+    section: 'dwss',
+    description: 'Templates and approvals',
+    accentColor: '#5f7cae',
+  },
+  {
     key: 'Team',
     label: 'Team Management',
     icon: 'account-group-outline',
