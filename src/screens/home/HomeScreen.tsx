@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import dayjs from 'dayjs';
 import { useAuthStore } from '../../store/authStore';
 import { getProjects, Project } from '../../api/projects';
@@ -157,7 +158,12 @@ export default function HomeScreen() {
         ListEmptyComponent={
           !isLoading ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyIcon}>🏗️</Text>
+              <MaterialCommunityIcons
+                name="hard-hat"
+                size={48}
+                color={colors.textMuted}
+                style={styles.emptyIcon}
+              />
               <Text style={styles.emptyTitle}>No projects yet</Text>
               <Text style={styles.emptySubtitle}>
                 Projects assigned to your account will appear here.

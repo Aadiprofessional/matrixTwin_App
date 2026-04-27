@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { useAuthStore } from '../../store/authStore';
 import ModuleShell from './ModuleShell';
@@ -30,7 +31,7 @@ export default function SettingsScreen() {
   ];
 
   return (
-    <ModuleShell title="Settings" icon="⚙️" projectName={projectName}>
+    <ModuleShell title="Settings" iconName="cog" projectName={projectName}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
         {rows.map(r => (

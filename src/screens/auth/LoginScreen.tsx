@@ -21,6 +21,7 @@ import { login } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Same schema as the web login form
 const loginSchema = z.object({
@@ -131,7 +132,11 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={styles.eyeBtn}
               onPress={() => setShowPassword(v => !v)}>
-              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+              <MaterialCommunityIcons
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={20}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           </View>
           {errors.password && (

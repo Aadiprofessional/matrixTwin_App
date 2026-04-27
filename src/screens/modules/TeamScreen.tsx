@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { getProjectMembers, TeamMember } from '../../api/team';
 import ModuleShell from './ModuleShell';
@@ -57,7 +58,7 @@ export default function TeamScreen() {
   };
 
   return (
-    <ModuleShell title="Team Management" icon="👥" projectName={projectName}>
+    <ModuleShell title="Team Management" iconName="people" projectName={projectName}>
       <View style={styles.toolbar}>
         <Text style={styles.count}>{members.length} members</Text>
       </View>
@@ -71,7 +72,12 @@ export default function TeamScreen() {
           renderItem={renderItem}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>👥</Text>
+              <MaterialCommunityIcons
+                name="people"
+                size={48}
+                color={colors.textMuted}
+                style={styles.emptyIcon}
+              />
               <Text style={styles.emptyText}>No team members assigned yet.</Text>
             </View>
           }

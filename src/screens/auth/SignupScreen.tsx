@@ -22,6 +22,7 @@ import { login } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Same validation as web Signup.tsx (manual checks replicated with Zod)
 const signupSchema = z
@@ -170,7 +171,11 @@ export default function SignupScreen() {
             <TouchableOpacity
               style={styles.eyeBtn}
               onPress={() => setShowPassword(v => !v)}>
-              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+              <MaterialCommunityIcons
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={20}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           </View>
           {errors.password && <Text style={styles.fieldError}>{errors.password.message}</Text>}
@@ -200,7 +205,11 @@ export default function SignupScreen() {
             <TouchableOpacity
               style={styles.eyeBtn}
               onPress={() => setShowConfirm(v => !v)}>
-              <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁️'}</Text>
+              <MaterialCommunityIcons
+                name={showConfirm ? 'eye-off' : 'eye'}
+                size={20}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           </View>
           {errors.confirmPassword && (

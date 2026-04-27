@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
@@ -21,28 +22,28 @@ interface Slide {
   id: string;
   title: string;
   subtitle: string;
-  icon: string;
+  iconName: string;
 }
 
 // Content pulled directly from the web landing page (HomePage.tsx + FeatureSection)
 const SLIDES: Slide[] = [
   {
     id: '1',
-    icon: '🏗️',
+    iconName: 'hard-hat',
     title: 'MatrixTwin\nDigital Construction Platform',
     subtitle:
       'Trusted by construction leaders worldwide. Powered by advanced AI and digital twin technology. Create virtual replicas of your construction sites and manage everything in one platform.',
   },
   {
     id: '2',
-    icon: '🔩',
+    iconName: 'wrench',
     title: 'Digital Twins & IoT Integration',
     subtitle:
       'Create precise virtual replicas of physical construction sites. Connect IoT sensors for real-time monitoring of environmental conditions, equipment usage, and safety parameters.',
   },
   {
     id: '3',
-    icon: '🤖',
+    iconName: 'robot',
     title: 'AI-Powered Analytics',
     subtitle:
       'Analyze project data to identify potential delays, optimize resource allocation, and provide actionable insights throughout the project lifecycle.',
@@ -77,7 +78,12 @@ export default function OnboardingScreen() {
 
   const renderItem = ({ item }: ListRenderItemInfo<Slide>) => (
     <View style={styles.slide}>
-      <Text style={styles.icon}>{item.icon}</Text>
+      <MaterialCommunityIcons
+        name={item.iconName}
+        size={80}
+        color={colors.primary}
+        style={styles.icon}
+      />
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
     </View>
@@ -157,7 +163,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   icon: {
-    fontSize: 72,
     marginBottom: spacing.xl,
   },
   title: {

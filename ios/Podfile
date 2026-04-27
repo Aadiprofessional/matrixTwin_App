@@ -37,6 +37,7 @@ target 'MatrixTwinAPP' do
         cfg.build_settings['DEFINES_MODULE'] = 'NO'
       end
     end
+    
     installer.pods_project.save
 
     # MMKV v3 uses crc32 from zlib.

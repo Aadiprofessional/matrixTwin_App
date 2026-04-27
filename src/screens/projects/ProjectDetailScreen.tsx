@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import dayjs from 'dayjs';
 import { getProjectById } from '../../api/projects';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
@@ -32,10 +33,11 @@ function statusColor(status: string): string {
   }
 }
 
-interface MetaRowProps { label: string; value: string }
-function MetaRow({ label, value }: MetaRowProps) {
+interface MetaRowProps { label: string; value: string; icon?: string }
+function MetaRow({ label, value, icon }: MetaRowProps) {
   return (
     <View style={styles.metaRow}>
+      {icon && <MaterialCommunityIcons name={icon} size={16} color={colors.textSecondary} style={{ marginRight: spacing.xs }} />}
       <Text style={styles.metaLabel}>{label}</Text>
       <Text style={styles.metaValue}>{value}</Text>
     </View>
@@ -83,7 +85,12 @@ export default function ProjectDetailScreen() {
 
       {isError && (
         <View style={styles.errorBox}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <MaterialCommunityIcons
+            name="alert-circle"
+            size={40}
+            color={colors.error}
+            style={styles.errorIcon}
+          />
           <Text style={styles.errorTitle}>Failed to load project</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.retryText}>Go back</Text>
@@ -114,11 +121,11 @@ export default function ProjectDetailScreen() {
           {/* Metadata card */}
           <View style={styles.metaCard}>
             <Text style={styles.metaCardTitle}>PROJECT DETAILS</Text>
-            {project.location   ? <MetaRow label="📍 Location" value={project.location} />   : null}
-            {project.client     ? <MetaRow label="🏢 Client"   value={project.client} />     : null}
-            {project.deadline   ? <MetaRow label="📅 Deadline" value={dayjs(project.deadline).format('D MMMM YYYY')} /> : null}
-            {project.created_at ? <MetaRow label="🗓 Created"  value={dayjs(project.created_at).format('D MMMM YYYY')} /> : null}
-            {project.created_by ? <MetaRow label="👤 Owner"    value={project.created_by} /> : null}
+            {project.location   ? <MetaRow label="Location" value={project.location} icon="map-marker" />   : null}
+            {project.client     ? <MetaRow label="Client"   value={project.client} icon="office-building" />     : null}
+            {project.deadline   ? <MetaRow label="Deadline" value={dayjs(project.deadline).format('D MMMM YYYY')} icon="calendar" /> : null}
+            {project.created_at ? <MetaRow label="Created"  value={dayjs(project.created_at).format('D MMMM YYYY')} icon="calendar" /> : null}
+            {project.created_by ? <MetaRow label="Owner"    value={project.created_by} icon="account" /> : null}
           </View>
 
           {/* Description */}
@@ -132,10 +139,12 @@ export default function ProjectDetailScreen() {
           {/* Action buttons */}
           <View style={styles.actionsRow}>
             <TouchableOpacity style={[styles.actionBtn, { borderColor: sc + '66' }]} activeOpacity={0.8}>
-              <Text style={[styles.actionBtnText, { color: sc }]}>📊  Dashboard</Text>
+              <MaterialCommunityIcons name="view-dashboard" size={18} color={sc} />
+              <Text style={[styles.actionBtnText, { color: sc }]}>  Dashboard</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} activeOpacity={0.8}>
-              <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>👥  Team</Text>
+              <MaterialCommunityIcons name="people" size={18} color={colors.textSecondary} />
+              <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>  Team</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -248,9 +257,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   actionBtn: {
-    flex: 1, borderWidth: 1,
+    flex: 1, borderWidth: 1, flexDirection: 'row',
     borderRadius: radius.lg, paddingVertical: spacing.md,
-    alignItems: 'center', backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface,
   },
   actionBtnText: { fontSize: 14, fontWeight: '600' },
 
@@ -265,7 +274,7 @@ const styles = StyleSheet.create({
     flex: 1, justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: spacing.xl, gap: spacing.md,
   },
-  errorIcon: { fontSize: 48 },
+  errorIcon: { marginBottom: spacing.md },
   errorTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   retryBtn: {
     backgroundColor: colors.primary,

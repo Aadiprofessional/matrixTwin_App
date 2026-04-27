@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 
 export interface StoredAIChatMessage {
   id: string;
@@ -45,6 +45,7 @@ const mapSession = (session: ChatSessionRow): AIChatSession => ({
 });
 
 export const listAIChatSessions = async (userId: string) => {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('chat_sessions')
     .select('*, chat_messages (*)')
@@ -65,6 +66,7 @@ export const createAIChatSession = async (payload: {
   title: string;
   createdAt: string;
 }) => {
+  const supabase = getSupabaseClient();
   const { error } = await supabase.from('chat_sessions').insert({
     id: payload.id,
     user_id: payload.userId,
@@ -88,6 +90,7 @@ export const insertAIChatMessage = async (payload: {
   imageUrl?: string | null;
   isStreaming?: boolean;
 }) => {
+  const supabase = getSupabaseClient();
   const { error } = await supabase.from('chat_messages').insert({
     id: payload.id,
     session_id: payload.sessionId,
@@ -107,6 +110,7 @@ export const updateAIChatMessage = async (messageId: string, updates: {
   content?: string;
   is_streaming?: boolean;
 }) => {
+  const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('chat_messages')
     .update(updates)
@@ -121,6 +125,7 @@ export const updateAIChatSession = async (sessionId: string, updates: {
   title?: string;
   last_updated_at?: string;
 }) => {
+  const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('chat_sessions')
     .update(updates)
@@ -132,6 +137,7 @@ export const updateAIChatSession = async (sessionId: string, updates: {
 };
 
 export const deleteAIChatSession = async (sessionId: string, userId: string) => {
+  const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('chat_sessions')
     .delete()

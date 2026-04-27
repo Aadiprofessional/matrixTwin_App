@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthStore } from '../../store/authStore';
 import { getCurrentUser } from '../../api/auth';
 import {
@@ -192,7 +193,11 @@ export default function CompanyScreen() {
             {/* Register New Company */}
             <TouchableOpacity style={styles.optionCard} onPress={() => setShowAdminModal(true)} activeOpacity={0.8}>
               <View style={[styles.iconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                <Text style={styles.iconEmoji}>🏢</Text>
+                <MaterialCommunityIcons
+                  name="office-building"
+                  size={32}
+                  color="#3B82F6"
+                />
               </View>
               <Text style={styles.optionTitle}>Register New Company</Text>
               <Text style={styles.optionDesc}>
@@ -216,7 +221,11 @@ export default function CompanyScreen() {
             {/* Join Existing Company */}
             <TouchableOpacity style={styles.optionCard} onPress={() => setShowJoinModal(true)} activeOpacity={0.8}>
               <View style={[styles.iconCircle, { backgroundColor: 'rgba(5, 194, 123, 0.15)' }]}>
-                <Text style={styles.iconEmoji}>👥</Text>
+                <MaterialCommunityIcons
+                  name="people"
+                  size={32}
+                  color="#05C27B"
+                />
               </View>
               <Text style={styles.optionTitle}>Join Existing Company</Text>
               <Text style={styles.optionDesc}>
@@ -390,7 +399,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  iconEmoji: { fontSize: 24 },
   optionTitle: {
     fontSize: 20,
     fontWeight: '700',
