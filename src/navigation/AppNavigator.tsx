@@ -16,6 +16,8 @@ import TeamScreen from '../screens/modules/TeamScreen';
 import SettingsScreen from '../screens/modules/SettingsScreen';
 import AskAIScreen from '../screens/modules/AskAIScreen';
 import FormsScreen from '../screens/modules/FormsScreen';
+import DigitalTwinsScreen from '../screens/modules/DigitalTwinsScreen';
+import DWSSScreen from '../screens/modules/DWSSScreen';
 
 export type AppStackParamList = {
   Company: undefined;
@@ -31,6 +33,9 @@ export type AppStackParamList = {
   Settings: { projectId: string; projectName: string };
   AskAI: { projectId: string; projectName: string };
   Forms: { projectId: string; projectName: string };
+  DigitalTwins: { projectId: string; projectName: string };
+  DigitalTwinDetail: { modelId: string; projectId: string };
+  DWSS: { projectId: string; projectName: string };
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -105,6 +110,21 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Forms"
         component={FormsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="DigitalTwins"
+        component={DigitalTwinsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="DigitalTwinDetail"
+        component={DigitalTwinsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="DWSS"
+        component={DWSSScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

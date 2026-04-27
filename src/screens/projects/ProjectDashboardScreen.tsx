@@ -39,6 +39,14 @@ const NAV_MODULES: NavModule[] = [
     accentColor: colors.primary,
   },
   {
+    key: 'DigitalTwins',
+    label: 'Digital Twins',
+    icon: 'cube-outline',
+    section: 'main',
+    description: '3D site models & visualization',
+    accentColor: '#7c3aed',
+  },
+  {
     key: 'Rfi',
     label: 'RFI / RICS',
     icon: 'clipboard-list-outline',
@@ -77,6 +85,14 @@ const NAV_MODULES: NavModule[] = [
     section: 'dwss',
     description: 'Cleaning inspections',
     accentColor: '#10b981',
+  },
+  {
+    key: 'DWSS',
+    label: 'DWSS',
+    icon: 'factory',
+    section: 'dwss',
+    description: 'Digital work site systems',
+    accentColor: '#06b6d4',
   },
   {
     key: 'Forms',
