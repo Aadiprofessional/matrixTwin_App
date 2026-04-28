@@ -41,8 +41,8 @@ const NAV_MODULES: NavModule[] = [
 
   {
     key: 'ModelViewer',
-    label: '3D Model Viewer',
-    icon: 'view-3d',
+    label: 'Digital Twin',
+    icon: 'cube-outline',
     section: 'main',
     description: 'Direct BIMFACE 3D viewer',
     accentColor: '#8b5cf6',

@@ -212,9 +212,6 @@ export default function ProjectsScreen() {
                 <Text style={styles.newBtnText}>+ NEW</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-              <Text style={styles.logoutText}>↩</Text>
-            </TouchableOpacity>
           </View>
         </View>
 

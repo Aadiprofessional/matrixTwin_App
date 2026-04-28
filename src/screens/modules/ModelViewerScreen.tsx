@@ -414,6 +414,10 @@ export default function ModelViewerScreen({ route, navigation }: ModelViewerScre
     navigation.setOptions({
       title: 'Digital Twin Viewer',
       headerShown: true,
+      headerStyle: {
+        backgroundColor: colors.surface,
+      },
+      headerTintColor: colors.text,
     });
   }, [navigation]);
 
@@ -738,105 +742,103 @@ export default function ModelViewerScreen({ route, navigation }: ModelViewerScre
 
         {/* Left Panel - Sensors */}
         {leftPanelVisible && (
-          <SafeAreaView style={[styles.leftPanel, { transform: [{ translateX: leftPanelX }] }]}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>Sensors</Text>
-              <TouchableOpacity onPress={toggleLeftPanel}>
-                <Ionicons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.panelContent}>
-              {sensors.map(sensor => (
-                <SensorItem
-                  key={sensor.id}
-                  sensor={sensor}
-                  onPress={() => {
-                    setSelectedSensor(sensor);
-                    setSensorModalVisible(true);
-                  }}
-                />
-              ))}
-            </ScrollView>
-          </SafeAreaView>
+          <Animated.View style={[styles.leftPanel, { transform: [{ translateX: leftPanelX }] }]}>
+            <SafeAreaView style={styles.panelSafeArea}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>Sensors</Text>
+                <TouchableOpacity onPress={toggleLeftPanel}>
+                  <Ionicons name="close" size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.panelContent}>
+                {sensors.map(sensor => (
+                  <SensorItem
+                    key={sensor.id}
+                    sensor={sensor}
+                    onPress={() => {
+                      setSelectedSensor(sensor);
+                      setSensorModalVisible(true);
+                    }}
+                  />
+                ))}
+              </ScrollView>
+            </SafeAreaView>
+          </Animated.View>
         )}
 
         {/* Right Panel - CCTV */}
         {rightPanelVisible && (
-          <SafeAreaView style={[styles.rightPanel, { transform: [{ translateX: rightPanelX }] }]}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>CCTV Cameras</Text>
-              <TouchableOpacity onPress={toggleRightPanel}>
-                <Ionicons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.panelContent}>
-              {cctvCameras.map(camera => (
-                <CameraItem
-                  key={camera.id}
-                  camera={camera}
-                  onPress={() => {
-                    setSelectedCamera(camera);
-                    setCameraModalVisible(true);
-                  }}
-                />
-              ))}
-            </ScrollView>
-          </SafeAreaView>
+          <Animated.View style={[styles.rightPanel, { transform: [{ translateX: rightPanelX }] }]}>
+            <SafeAreaView style={styles.panelSafeArea}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>CCTV Cameras</Text>
+                <TouchableOpacity onPress={toggleRightPanel}>
+                  <Ionicons name="close" size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.panelContent}>
+                {cctvCameras.map(camera => (
+                  <CameraItem
+                    key={camera.id}
+                    camera={camera}
+                    onPress={() => {
+                      setSelectedCamera(camera);
+                      setCameraModalVisible(true);
+                    }}
+                  />
+                ))}
+              </ScrollView>
+            </SafeAreaView>
+          </Animated.View>
         )}
 
         {/* Asset Panel */}
         {assetPanelVisible && (
-          <SafeAreaView style={[styles.rightPanel, { transform: [{ translateX: rightPanelX }] }]}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>Asset Information</Text>
-              <TouchableOpacity onPress={() => setAssetPanelVisible(false)}>
-                <Ionicons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.panelContent}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search assets..."
-                placeholderTextColor={colors.textSecondary}
-              />
-              <View style={styles.assetCategory}>
-                <Text style={styles.assetCategoryTitle}>General</Text>
-                <Text style={styles.assetCategoryDesc}>Building systems and infrastructure</Text>
+          <Animated.View style={[styles.rightPanel, { transform: [{ translateX: rightPanelX }] }]}>
+            <SafeAreaView style={styles.panelSafeArea}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>Asset Information</Text>
+                <TouchableOpacity onPress={() => setAssetPanelVisible(false)}>
+                  <Ionicons name="close" size={20} color={colors.text} />
+                </TouchableOpacity>
               </View>
-              <View style={styles.assetCategory}>
-                <Text style={styles.assetCategoryTitle}>Documentations</Text>
-                <Text style={styles.assetCategoryDesc}>Technical manuals and specifications</Text>
+              <View style={styles.panelContent}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search assets..."
+                  placeholderTextColor={colors.textSecondary}
+                />
+                <View style={styles.assetCategory}>
+                  <Text style={styles.assetCategoryTitle}>General</Text>
+                  <Text style={styles.assetCategoryDesc}>Building systems and infrastructure</Text>
+                </View>
+                <View style={styles.assetCategory}>
+                  <Text style={styles.assetCategoryTitle}>Documentations</Text>
+                  <Text style={styles.assetCategoryDesc}>Technical manuals and specifications</Text>
+                </View>
               </View>
-            </View>
-          </SafeAreaView>
+            </SafeAreaView>
+          </Animated.View>
         )}
       </View>
 
       {/* Bottom Controls Bar */}
-      <SafeAreaView style={styles.bottomControls}>
+      <View style={styles.bottomControls}>
         <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          style={styles.toggleButton}
+          onPress={toggleLeftPanel}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.white} />
+          <Ionicons name="list" size={20} color={colors.white} />
+          <Text style={styles.toggleButtonText}>Sensors</Text>
         </TouchableOpacity>
-        <View style={styles.buttonGroup}>
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={toggleLeftPanel}
-          >
-            <Ionicons name="list" size={20} color={colors.white} />
-            <Text style={styles.toggleButtonText}>Sensors</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={toggleRightPanel}
-          >
-            <Ionicons name="videocam" size={20} color={colors.white} />
-            <Text style={styles.toggleButtonText}>CCTV</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+        <TouchableOpacity
+          style={styles.toggleButton}
+          onPress={toggleRightPanel}
+        >
+          <Ionicons name="videocam" size={20} color={colors.white} />
+          <Text style={styles.toggleButtonText}>CCTV</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sensor Detail Modal */}
       <Modal
@@ -1048,6 +1050,9 @@ const styles = StyleSheet.create({
     borderRightColor: colors.border,
     zIndex: 10,
   },
+  panelSafeArea: {
+    flex: 1,
+  },
   rightPanel: {
     position: 'absolute',
     right: 0,
@@ -1189,22 +1194,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingBottom: spacing.lg,
     zIndex: 30,
-  },
-  backButton: {
-    backgroundColor: colors.primary,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonGroup: {
-    flexDirection: 'row',
-    gap: spacing.sm,
   },
   searchInput: {
     backgroundColor: colors.background,
