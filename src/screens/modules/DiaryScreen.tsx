@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Modal, TextInput, Alert, ScrollView,
-  KeyboardAvoidingView, Platform, Share, Dimensions
+  KeyboardAvoidingView, Platform, Dimensions, Linking
 } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import dayjs from 'dayjs';
@@ -18,7 +18,9 @@ import { useAuthStore } from '../../store/authStore';
 import ModuleShell from './ModuleShell';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
-import { getProjectMembers, TeamMember } from '../../api/team';
+import { getProjectMembers, ProjectMember, TeamMember } from '../../api/team';
+import { generateReport } from '../../api/analytics';
+import { API_BASE_URL } from '../../api/client';
 import SiteDiaryFormTemplate from '../../components/forms/SiteDiaryFormTemplate';
 import ProcessFlowBuilder, { ProcessNode as PFNode } from '../../components/forms/ProcessFlowBuilder';
 import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
@@ -110,14 +112,19 @@ export default function DiaryScreen() {
   const [peopleSelectorType, setPeopleSelectorType] = useState<'executor' | 'cc'>('executor');
   
   const [showReport, setShowReport] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [projectMembers, setProjectMembers] = useState<TeamMember[]>([]);
+  const isSmallScreen = useMemo(() => Dimensions.get('window').width < 390, []);
 
   useEffect(() => {
     const loadMembers = async () => {
       try {
         const members = await getProjectMembers(projectId);
-        setProjectMembers(Array.isArray(members) ? members : []);
+        const normalizedMembers = Array.isArray(members)
+          ? members.map((member: ProjectMember) => member.user).filter(Boolean)
+          : [];
+        setProjectMembers(normalizedMembers);
       } catch (error) {
         console.error('Failed to load project members:', error);
       }
@@ -422,9 +429,101 @@ export default function DiaryScreen() {
     return node?.executor_id === user.id;
   };
 
+  const reportData = useMemo(() => {
+    const contributorMap = filtered.reduce<Record<string, number>>((acc, entry) => {
+      const key = entry.author || 'Unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const weatherMap = filtered.reduce<Record<string, number>>((acc, entry) => {
+      const key = (entry.weather || 'Other').trim() || 'Other';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const contributorsList = Object.entries(contributorMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name, count]) => ({ name, count }));
+
+    const weatherList = Object.entries(weatherMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([label, count]) => ({ label, count }));
+
+    const topContributor = contributorsList[0] || { name: 'N/A', count: 0 };
+    const topWeather = weatherList[0] || { label: 'N/A', count: 0 };
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const tempValues = filtered
+      .map((entry) => {
+        const match = (entry.temperature || '').match(/-?\d+(\.\d+)?/);
+        return match ? Number(match[0]) : null;
+      })
+      .filter((value): value is number => value !== null);
+
+    const avgTemp = tempValues.length
+      ? (tempValues.reduce((sum, value) => sum + value, 0) / tempValues.length).toFixed(1)
+      : null;
+
+    const incidents = filtered
+      .filter((entry) => {
+        const incidentText = (entry.incidents_reported || '').trim().toLowerCase();
+        return incidentText.length > 0 && incidentText !== 'none' && incidentText !== 'no';
+      })
+      .slice(0, 8);
+
+    return {
+      completionRate,
+      topContributor,
+      topWeather,
+      avgTemp,
+      incidents,
+      contributorsList,
+      weatherList,
+    };
+  }, [filtered, total, completed]);
+
+  const openPdfReport = async () => {
+    if (!user?.id) return;
+    setDownloadingReport(true);
+    try {
+      const report = await generateReport({
+        projectId,
+        type: 'daily',
+        modules: ['diary'],
+        format: 'pdf',
+      });
+
+      const rawUrl = report?.fileUrl;
+      if (!rawUrl) {
+        Alert.alert('Unavailable', 'PDF file is not available for this report yet.');
+        return;
+      }
+
+      const host = API_BASE_URL.replace(/\/api\/?$/, '');
+      const resolvedUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : `${host}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+
+      const canOpen = await Linking.canOpenURL(resolvedUrl);
+      if (!canOpen) {
+        Alert.alert('Error', 'Unable to open PDF download link on this device.');
+        return;
+      }
+
+      await Linking.openURL(resolvedUrl);
+      setShowReport(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.message || 'Failed to generate PDF report.');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
   const renderHeader = () => (
     <View style={S.pageHeader}>
-      <Text style={S.pageTitle}>Site Diary</Text>
       <Text style={S.pageDesc}>
         Manage daily site logs with faster scanning, stronger status visibility, and cleaner project context.
       </Text>
@@ -435,17 +534,6 @@ export default function DiaryScreen() {
         </View>
       </View>
       
-      <View style={S.actionRowTop}>
-        <TouchableOpacity style={S.primaryBtn} onPress={() => setShowCreate(true)}>
-          <Icon name="plus" size={16} color="#000" />
-          <Text style={S.primaryBtnText}>New Entry</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={S.secondaryBtn} onPress={() => setShowReport(true)}>
-          <Icon name="file-document-outline" size={16} color="#fff" />
-          <Text style={S.secondaryBtnText}>Generate Report</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={S.statsBox}>
         <View style={S.statItem}><Text style={S.statLabel}>Total</Text><Text style={S.statValue}>{total}</Text></View>
         <View style={S.statItem}><Text style={S.statLabel}>This Week</Text><Text style={S.statValue}>{thisWeek}</Text></View>
@@ -454,35 +542,67 @@ export default function DiaryScreen() {
         <View style={[S.statItem, { borderRightWidth: 0 }]}><Text style={S.statLabel}>Contributors</Text><Text style={S.statValue}>{contributors}</Text></View>
       </View>
 
-      <Text style={S.sectionTitleMain}>Search & Filter</Text>
-      <View style={S.searchArea}>
+      <View style={S.searchRow}>
         <View style={S.searchInputWrap}>
           <Icon name="magnify" size={18} color="#666" />
-          <TextInput style={S.searchInput} placeholder="Search by project, author, work" placeholderTextColor="#666" value={searchQuery} onChangeText={setSearchQuery} />
+          <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={searchQuery} onChangeText={setSearchQuery} />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Icon name="close-circle" size={16} color="#555" />
+            </TouchableOpacity>
+          )}
         </View>
-        <View style={S.filterSelects}>
-          <View style={S.fakeSelect}><Text style={S.fakeSelectText}>All statuses</Text><Icon name="chevron-down" size={16} color="#666" /></View>
-          <View style={S.fakeSelect}><Text style={S.fakeSelectText}>Newest first</Text><Icon name="chevron-down" size={16} color="#666" /></View>
-        </View>
+        <TouchableOpacity
+          style={S.sortBtn}
+          onPress={() => setSortBy(prev => prev === 'newest' ? 'oldest' : 'newest')}
+        >
+          <Icon
+            name={sortBy === 'newest' ? 'sort-calendar-descending' : 'sort-calendar-ascending'}
+            size={20}
+            color="#b0c985"
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={S.tabsRow}>
-        {(['all','pending','completed','rejected','permanent'] as const).map(tab => (
-          <TouchableOpacity key={tab} onPress={() => setFilterStatus(tab)} style={[S.tab, filterStatus === tab && S.tabActive]}>
-            <Text style={[S.tabText, filterStatus === tab && S.tabTextActive]}>
-              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}{' '}
-              {tab === 'all' ? total : tab === 'pending' ? pending : tab === 'completed' ? completed : tab === 'rejected' ? rejected : permanent}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {([
+          { key: 'all',       icon: 'view-list-outline',   count: total,     label: 'All'  },
+          { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
+          { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
+          { key: 'rejected',  icon: 'close-circle-outline', count: rejected,  label: 'Rejected' },
+          { key: 'permanent', icon: 'cancel',               count: permanent, label: 'Perm.' },
+        ] as const).map(({ key, icon, count }) => {
+          const active = filterStatus === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setFilterStatus(key)}
+              style={[S.tab, active && S.tabActive]}
+            >
+              <Icon name={icon} size={15} color={active ? '#b0c985' : '#666'} />
+              <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
       
       <Text style={S.shownText}>{filtered.length} shown</Text>
     </View>
   );
 
+  const navActions = (
+    <View style={S.navActions}>
+      <TouchableOpacity style={S.navActionBtn} onPress={() => setShowCreate(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Icon name="plus" size={20} color="#b0c985" />
+      </TouchableOpacity>
+      <TouchableOpacity style={S.navActionBtnSecondary} onPress={() => setShowReport(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Icon name="file-chart-outline" size={20} color="#aaa" />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
-    <ModuleShell title="Site Diary" iconName="book-open-outline" accentColor={ACCENT} projectName={projectName}>
+    <ModuleShell title="Site Diary" iconName="book-open-outline" accentColor={ACCENT} projectName={projectName} rightAction={navActions}>
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
@@ -531,22 +651,19 @@ export default function DiaryScreen() {
               </View>
 
               <Text style={S.sectionLabel}>Activation</Text>
-              <View style={{ alignItems: 'flex-start', marginBottom: 16 }}>
+              <View style={S.activationWrap}>
                 <TouchableOpacity style={S.activationBtn} onPress={() => handleSetExpiryStatus(item, true)}>
                   <Text style={S.activationBtnText}>Set Active</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={S.cardActions}>
-                <TouchableOpacity onPress={() => openDetail(item)}><Text style={S.actionLink}>View Details</Text></TouchableOpacity>
-                <Text style={S.actionDot}>•</Text>
-                <TouchableOpacity onPress={() => fetchHistory(item.id)}><Text style={S.actionLink}>History</Text></TouchableOpacity>
+                <TouchableOpacity style={S.cardActionBtn} onPress={() => openDetail(item)}><Text style={S.actionLink}>View Details</Text></TouchableOpacity>
+                <TouchableOpacity style={S.cardActionBtn} onPress={() => fetchHistory(item.id)}><Text style={S.actionLink}>History</Text></TouchableOpacity>
                 {user?.role === 'admin' && (
                   <>
-                    <Text style={S.actionDot}>•</Text>
-                    <TouchableOpacity onPress={() => handleRenameDiary(item)}><Text style={S.actionLink}>Rename</Text></TouchableOpacity>
-                    <Text style={S.actionDot}>•</Text>
-                    <TouchableOpacity onPress={() => handleDelete(item)}><Text style={[S.actionLink, { color: '#ff4444' }]}>Delete</Text></TouchableOpacity>
+                    <TouchableOpacity style={S.cardActionBtn} onPress={() => handleRenameDiary(item)}><Text style={S.actionLink}>Rename</Text></TouchableOpacity>
+                    <TouchableOpacity style={[S.cardActionBtn, S.cardActionDelete]} onPress={() => handleDelete(item)}><Text style={[S.actionLink, { color: '#ff7373' }]}>Delete</Text></TouchableOpacity>
                   </>
                 )}
               </View>
@@ -558,14 +675,14 @@ export default function DiaryScreen() {
       {/* View Details Modal */}
       <Modal visible={showDetail} animationType="slide" transparent>
         <View style={S.modalOverlay}>
-          <View style={S.detailsSheet}>
+          <View style={[S.detailsSheet, isSmallScreen && S.detailsSheetMobile]}>
             <View style={S.sheetHeader}>
               <Text style={S.sheetTitle}>Diary Entry Details</Text>
               <TouchableOpacity onPress={() => setShowDetail(false)}><Icon name="close" size={24} color="#fff" /></TouchableOpacity>
             </View>
             
             {selectedEntry && (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.detailScrollContent}>
                 <Text style={S.detailDate}>{dayjs(selectedEntry.date).format('YYYY-MM-DD')}</Text>
                 
                 <Text style={S.detailSectionTitle}>Author</Text>
@@ -617,15 +734,15 @@ export default function DiaryScreen() {
                 )}
 
                 <Text style={S.detailSectionTitle}>Export</Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                <View style={S.exportRow}>
                   <TouchableOpacity style={S.exportBtn}><Icon name="download" size={16} color="#fff" /><Text style={S.exportBtnText}>Export</Text></TouchableOpacity>
                   <TouchableOpacity style={S.exportBtn}><Icon name="printer" size={16} color="#fff" /><Text style={S.exportBtnText}>Print</Text></TouchableOpacity>
                 </View>
 
                 <View style={{ height: 1, backgroundColor: '#333', marginVertical: 20 }} />
                 
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
-                  <TouchableOpacity style={S.bottomBtn}><Text style={[S.bottomBtnText, { color: '#ff4444' }]}>Delete</Text></TouchableOpacity>
+                <View style={S.bottomActionRow}>
+                  <TouchableOpacity style={[S.bottomBtn, S.bottomBtnDanger]}><Text style={[S.bottomBtnText, { color: '#ff7373' }]}>Delete</Text></TouchableOpacity>
                   <TouchableOpacity style={S.bottomBtn} onPress={() => setShowDetail(false)}><Text style={S.bottomBtnText}>Close</Text></TouchableOpacity>
                 </View>
               </ScrollView>
@@ -716,9 +833,9 @@ export default function DiaryScreen() {
                </View>
              )}
 
-             <View style={S.processActions}>
+             <View style={[S.processActions, isSmallScreen && S.processActionsMobile]}>
                <TouchableOpacity style={S.backBtn} onPress={() => setShowProcessFlow(false)}><Text style={S.backBtnText}>Back to Form</Text></TouchableOpacity>
-               <View style={{ flexDirection: 'row', gap: 10 }}>
+               <View style={[S.processActionGroup, isSmallScreen && S.processActionGroupMobile]}>
                  <TouchableOpacity style={S.cancelPBtn} onPress={() => setShowProcessFlow(false)}><Text style={S.cancelPBtnText}>Cancel</Text></TouchableOpacity>
                  <TouchableOpacity style={S.savePBtn} onPress={handleFinalSave}>
                    {submitting ? <ActivityIndicator color="#000" /> : <Text style={S.savePBtnText}>Save Diary Entry</Text>}
@@ -727,6 +844,91 @@ export default function DiaryScreen() {
              </View>
              <View style={{ height: 40 }} />
            </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={showReport} animationType="slide" transparent>
+        <View style={S.modalOverlay}>
+          <View style={[S.reportSheet, isSmallScreen && S.detailsSheetMobile]}>
+            <View style={S.reportHeaderBar}>
+              <View style={{ flex: 1 }}>
+                <Text style={S.reportHeaderTitle}>Diary Full Report</Text>
+                <Text style={S.reportHeaderSub}>Includes all currently listed diary entries with visuals, trends and details.</Text>
+              </View>
+              <TouchableOpacity style={S.reportHeaderAction} onPress={openPdfReport} disabled={downloadingReport}>
+                {downloadingReport ? <ActivityIndicator color="#0a0a0a" size="small" /> : <Icon name="download" size={14} color="#0a0a0a" />}
+                <Text style={S.reportHeaderActionText}>{downloadingReport ? 'Generating…' : 'Download PDF'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowReport(false)}><Icon name="close" size={24} color="#fff" /></TouchableOpacity>
+            </View>
+
+            <ScrollView style={S.reportBody} showsVerticalScrollIndicator={false}>
+              <View style={S.reportStatsRow}>
+                <View style={S.reportStatCard}><Text style={S.reportStatLabel}>Entries</Text><Text style={S.reportStatValue}>{filtered.length}</Text></View>
+                <View style={S.reportStatCard}><Text style={S.reportStatLabel}>Completion</Text><Text style={S.reportStatValue}>{reportData.completionRate}%</Text></View>
+                <View style={S.reportStatCard}><Text style={S.reportStatLabel}>Contributors</Text><Text style={S.reportStatValue}>{contributors}</Text></View>
+              </View>
+
+              <View style={S.reportChartsRow}>
+                <View style={S.reportCard}>
+                  <Text style={S.reportCardTitle}>Top Contributors</Text>
+                  {reportData.contributorsList.length === 0 && <Text style={S.reportMuted}>No data available</Text>}
+                  {reportData.contributorsList.map((item) => {
+                    const width = reportData.topContributor.count > 0 ? Math.max(8, Math.round((item.count / reportData.topContributor.count) * 100)) : 0;
+                    return (
+                      <View key={item.name} style={S.reportBarItem}>
+                        <View style={[S.reportBarFill, { width: `${width}%` }]} />
+                        <Text style={S.reportBarLabel}>{item.name} ({item.count})</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={S.reportCard}>
+                  <Text style={S.reportCardTitle}>Weather Distribution</Text>
+                  {reportData.weatherList.length === 0 && <Text style={S.reportMuted}>No data available</Text>}
+                  {reportData.weatherList.map((item) => {
+                    const width = reportData.topWeather.count > 0 ? Math.max(8, Math.round((item.count / reportData.topWeather.count) * 100)) : 0;
+                    return (
+                      <View key={item.label} style={S.reportBarItem}>
+                        <View style={[S.reportBarFillMuted, { width: `${width}%` }]} />
+                        <Text style={S.reportBarLabel}>{item.label} ({item.count})</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={S.reportCard}>
+                <Text style={S.reportCardTitle}>Report Highlights</Text>
+                <View style={S.reportHighlightGrid}>
+                  <View style={S.reportHighlightItem}><Text style={S.reportHighlightText}>Completion rate is {reportData.completionRate}% across {filtered.length} entries.</Text></View>
+                  <View style={S.reportHighlightItem}><Text style={S.reportHighlightText}>{reportData.incidents.length} entries include incidents.</Text></View>
+                  <View style={S.reportHighlightItem}><Text style={S.reportHighlightText}>{reportData.topContributor.name} logged the highest entries ({reportData.topContributor.count}).</Text></View>
+                  <View style={S.reportHighlightItem}><Text style={S.reportHighlightText}>Most common weather is {reportData.topWeather.label} ({reportData.topWeather.count} entries).</Text></View>
+                  <View style={S.reportHighlightItem}><Text style={S.reportHighlightText}>{reportData.avgTemp ? `Average temperature: ${reportData.avgTemp}°` : 'Not enough temperature data to calculate average.'}</Text></View>
+                </View>
+              </View>
+
+              <View style={S.reportCard}>
+                <Text style={S.reportCardTitle}>Incident Details</Text>
+                <View style={S.reportTableHeader}>
+                  <Text style={[S.reportTableHeadText, { flex: 1.1 }]}>Date</Text>
+                  <Text style={[S.reportTableHeadText, { flex: 1.2 }]}>Author</Text>
+                  <Text style={[S.reportTableHeadText, { flex: 2 }]}>Incident</Text>
+                </View>
+                {reportData.incidents.length === 0 ? (
+                  <Text style={S.reportEmptyTable}>No incidents found in the currently listed entries.</Text>
+                ) : reportData.incidents.map((entry) => (
+                  <View key={entry.id} style={S.reportTableRow}>
+                    <Text style={[S.reportTableCell, { flex: 1.1 }]}>{dayjs(entry.date).format('DD MMM')}</Text>
+                    <Text style={[S.reportTableCell, { flex: 1.2 }]}>{entry.author}</Text>
+                    <Text style={[S.reportTableCell, { flex: 2 }]} numberOfLines={2}>{entry.incidents_reported}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -739,35 +941,29 @@ export default function DiaryScreen() {
 const S = StyleSheet.create({
   listContent: { padding: 20, paddingBottom: 80 },
   pageHeader: { marginBottom: 20 },
-  pageTitle: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
-  pageDesc: { fontSize: 14, color: '#aaa', marginBottom: 16, lineHeight: 20 },
+  navActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navActionBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1e2a10', alignItems: 'center', justifyContent: 'center' },
+  navActionBtnSecondary: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
+  pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   projectChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e2414', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#334020', marginBottom: 20 },
   projectChipText: { color: '#e2ebcf', fontSize: 12, fontWeight: '600' },
-  actionRowTop: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#b0c985', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, gap: 6 },
-  primaryBtnText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
-  secondaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, gap: 6 },
-  secondaryBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   
   statsBox: { flexDirection: 'row', backgroundColor: '#111', borderRadius: 8, borderWidth: 1, borderColor: '#222', paddingVertical: 12, marginBottom: 24 },
   statItem: { flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#222' },
   statLabel: { color: '#888', fontSize: 11, marginBottom: 4 },
   statValue: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
-  sectionTitleMain: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  searchArea: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  searchInputWrap: { flex: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#333', borderRadius: 8, paddingHorizontal: 10 },
-  searchInput: { flex: 1, color: '#fff', height: 40, marginLeft: 8 },
-  filterSelects: { flex: 1.5, flexDirection: 'row', gap: 10 },
-  fakeSelect: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#111', borderWidth: 1, borderColor: '#333', borderRadius: 8, paddingHorizontal: 10, height: 40 },
-  fakeSelectText: { color: '#fff', fontSize: 12 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 14, marginLeft: 8 },
+  sortBtn: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
 
-  tabsRow: { flexDirection: 'row', flexWrap: 'wrap', borderBottomWidth: 1, borderBottomColor: '#333', marginBottom: 12 },
-  tab: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabActive: { borderBottomColor: '#b0c985' },
-  tabText: { color: '#888', fontSize: 13, fontWeight: '600' },
+  tabsRow: { flexDirection: 'row', gap: 6, marginBottom: 14 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#222', gap: 2 },
+  tabActive: { backgroundColor: '#1a2a10', borderColor: '#b0c985' },
+  tabText: { color: '#666', fontSize: 11, fontWeight: '700' },
   tabTextActive: { color: '#b0c985' },
-  shownText: { color: '#666', fontSize: 12, marginBottom: 16 },
+  shownText: { color: '#555', fontSize: 12, marginBottom: 14 },
 
   diaryCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#222', borderRadius: 12, padding: 20, marginBottom: 16 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -790,17 +986,22 @@ const S = StyleSheet.create({
   sectionLabel: { color: '#888', fontSize: 12, fontWeight: '600', marginBottom: 4, marginTop: 12 },
   sectionContent: { color: '#fff', fontSize: 14 },
 
+  activationWrap: { alignItems: 'flex-start', marginBottom: 16 },
   activationBtn: { borderWidth: 1, borderColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginTop: 4 },
   activationBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-  cardActions: { flexDirection: 'row', alignItems: 'center', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#222' },
+  cardActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#222' },
+  cardActionBtn: { minHeight: 36, borderRadius: 8, borderWidth: 1, borderColor: '#303030', backgroundColor: '#171717', paddingHorizontal: 12, justifyContent: 'center' },
+  cardActionDelete: { borderColor: '#4b2a2a', backgroundColor: '#251616' },
   actionLink: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  actionDot: { color: '#444', marginHorizontal: 8 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   detailsSheet: { width: '90%', maxHeight: '90%', backgroundColor: '#111', borderRadius: 12, borderWidth: 1, borderColor: '#333', overflow: 'hidden' },
+  reportSheet: { width: '92%', maxHeight: '92%', backgroundColor: '#070b05', borderRadius: 12, borderWidth: 1, borderColor: '#2a3b19', overflow: 'hidden' },
+  detailsSheetMobile: { width: '95%', maxHeight: '94%' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#222' },
   sheetTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  detailScrollContent: { padding: 20, paddingBottom: 28 },
   
   detailDate: { color: '#888', fontSize: 14, marginBottom: 16 },
   detailSectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', marginTop: 20, marginBottom: 8, letterSpacing: 1 },
@@ -817,11 +1018,47 @@ const S = StyleSheet.create({
   approveBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   approveBtnText: { color: '#fff', fontWeight: 'bold' },
 
+  exportRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
   exportBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, gap: 6 },
   exportBtnText: { color: '#fff', fontSize: 13 },
   
-  bottomBtn: { paddingHorizontal: 16, paddingVertical: 8 },
+  bottomActionRow: { flexDirection: 'row', gap: 10 },
+  bottomBtn: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: '#333', borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  bottomBtnDanger: { borderColor: '#4b2a2a', backgroundColor: '#251616' },
+  primaryBottomBtn: { backgroundColor: '#b0c985', borderColor: '#b0c985' },
   bottomBtnText: { color: '#888', fontSize: 14, fontWeight: 'bold' },
+  primaryBottomBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
+
+  reportHeaderBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#5f7f2b' },
+  reportHeaderTitle: { color: '#fff', fontSize: 21, fontWeight: '700' },
+  reportHeaderSub: { color: '#e3efcf', fontSize: 12, marginTop: 2 },
+  reportHeaderAction: { minHeight: 34, borderRadius: 8, backgroundColor: '#b8d37a', paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reportHeaderActionText: { color: '#0a0a0a', fontSize: 12, fontWeight: '700' },
+
+  reportBody: { paddingHorizontal: 12, paddingVertical: 12 },
+  reportStatsRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  reportStatCard: { flex: 1, backgroundColor: '#0b1108', borderWidth: 1, borderColor: '#1a2811', borderRadius: 8, padding: 10 },
+  reportStatLabel: { color: '#8aaa63', fontSize: 11, marginBottom: 4 },
+  reportStatValue: { color: '#e7f1d5', fontSize: 18, fontWeight: '700' },
+
+  reportChartsRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  reportCard: { flex: 1, backgroundColor: '#080c06', borderWidth: 1, borderColor: '#1a2811', borderRadius: 8, padding: 10, marginBottom: 10 },
+  reportCardTitle: { color: '#dceabf', fontSize: 12, fontWeight: '700', marginBottom: 10 },
+  reportMuted: { color: '#6f8257', fontSize: 12 },
+  reportBarItem: { height: 26, justifyContent: 'center', marginBottom: 8, position: 'relative', borderRadius: 4, overflow: 'hidden', backgroundColor: '#10180b' },
+  reportBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#6f8f38' },
+  reportBarFillMuted: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#90a86f' },
+  reportBarLabel: { color: '#deedbe', fontSize: 11, paddingHorizontal: 8, zIndex: 2 },
+
+  reportHighlightGrid: { gap: 8 },
+  reportHighlightItem: { borderWidth: 1, borderColor: '#172311', backgroundColor: '#0d1309', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8 },
+  reportHighlightText: { color: '#d8e8bb', fontSize: 12 },
+
+  reportTableHeader: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#1a2811', paddingVertical: 7, marginBottom: 4 },
+  reportTableHeadText: { color: '#9eb879', fontSize: 11, fontWeight: '700' },
+  reportTableRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#131c0d' },
+  reportTableCell: { color: '#deebc5', fontSize: 11, paddingRight: 8 },
+  reportEmptyTable: { color: '#7f9363', fontSize: 12, paddingVertical: 10, textAlign: 'center' },
 
   subTitle: { color: '#aaa', fontSize: 14, marginBottom: 24 },
   processSectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 24, marginBottom: 16 },
@@ -847,11 +1084,14 @@ const S = StyleSheet.create({
 
   toggleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
   
-  processActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 32, borderTopWidth: 1, borderTopColor: '#333', paddingTop: 20 },
+  processActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 32, borderTopWidth: 1, borderTopColor: '#333', paddingTop: 20, gap: 12 },
+  processActionsMobile: { flexDirection: 'column', alignItems: 'stretch' },
+  processActionGroup: { flexDirection: 'row', gap: 10 },
+  processActionGroupMobile: { flexDirection: 'column' },
   backBtn: { padding: 12 },
   backBtnText: { color: '#888', fontSize: 14, fontWeight: 'bold' },
-  cancelPBtn: { borderWidth: 1, borderColor: '#333', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  cancelPBtn: { borderWidth: 1, borderColor: '#333', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   cancelPBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  savePBtn: { backgroundColor: '#b0c985', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, justifyContent: 'center' },
+  savePBtn: { backgroundColor: '#b0c985', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   savePBtnText: { color: '#000', fontSize: 14, fontWeight: 'bold' },
 });

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView, Text, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
-import { getDigitalTwinModels } from '../../api/digitalTwins';
-import { AppStackParamList } from '../../navigation/AppNavigator';
+import { useNavigation, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
+import { getProjectModels } from '../../api/digitalTwins';
 
 type DigitalTwinsScreenProps = NativeStackScreenProps<AppStackParamList, 'DigitalTwins'>;
 
@@ -15,7 +17,7 @@ export default function DigitalTwinsScreen({ route, navigation }: DigitalTwinsSc
 
   const { data: models, isLoading } = useQuery({
     queryKey: ['digital-twins', projectId],
-    queryFn: () => getDigitalTwinModels(projectId),
+    queryFn: () => getProjectModels(projectId),
   });
 
   useEffect(() => {
@@ -35,7 +37,12 @@ export default function DigitalTwinsScreen({ route, navigation }: DigitalTwinsSc
         borderWidth: 1,
         borderColor: colors.border,
       }}
-      onPress={() => navigation.navigate('DigitalTwinDetail', { modelId: item.id, projectId })}
+      onPress={() => {
+        navigation.navigate('ModelViewer', { 
+          modelId: item.id, 
+          projectId 
+        });
+      }}
     >
       <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>
         {item.name}

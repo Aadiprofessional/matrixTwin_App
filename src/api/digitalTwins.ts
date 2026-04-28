@@ -16,6 +16,7 @@ export interface DigitalTwinModel {
   uploadedBy: string;
   createdAt: string;
   updatedAt?: string;
+  fileId?: number; // BIMFACE file ID for fetching fresh view tokens
 }
 
 export interface DigitalTwinAnnotation {
@@ -58,6 +59,10 @@ export const uploadDigitalTwinModel = (payload: FormData): Promise<DigitalTwinMo
 // GET /digital-twins/project/:projectId
 export const getProjectModels = (projectId: string): Promise<DigitalTwinModel[]> =>
   client.get(`/digital-twins/project/${projectId}`).then(r => r.data);
+
+// GET /digital-twins — returns all available digital twin models
+export const getAllModels = (): Promise<DigitalTwinModel[]> =>
+  client.get('/digital-twins').then(r => r.data);
 
 // GET /digital-twins/:modelId
 export const getDigitalTwinModel = (modelId: string): Promise<DigitalTwinModel> =>

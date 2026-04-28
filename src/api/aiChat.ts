@@ -45,18 +45,23 @@ const mapSession = (session: ChatSessionRow): AIChatSession => ({
 });
 
 export const listAIChatSessions = async (userId: string) => {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('chat_sessions')
-    .select('*, chat_messages (*)')
-    .eq('user_id', userId)
-    .order('last_updated_at', { ascending: false });
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('*, chat_messages (*)')
+      .eq('user_id', userId)
+      .order('last_updated_at', { ascending: false });
 
-  if (error) {
-    throw error;
+    if (error) {
+      throw error;
+    }
+
+    return ((data || []) as ChatSessionRow[]).map(mapSession);
+  } catch (error) {
+    console.error('Failed to list AI chat sessions:', error);
+    return [];
   }
-
-  return ((data || []) as ChatSessionRow[]).map(mapSession);
 };
 
 export const createAIChatSession = async (payload: {
@@ -66,17 +71,22 @@ export const createAIChatSession = async (payload: {
   title: string;
   createdAt: string;
 }) => {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase.from('chat_sessions').insert({
-    id: payload.id,
-    user_id: payload.userId,
-    project_id: payload.projectId ?? null,
-    title: payload.title,
-    created_at: payload.createdAt,
-    last_updated_at: payload.createdAt,
-  });
+  try {
+    const supabase: any = getSupabaseClient();
+    const { error } = await supabase.from('chat_sessions').insert({
+      id: payload.id,
+      user_id: payload.userId,
+      project_id: payload.projectId ?? null,
+      title: payload.title,
+      created_at: payload.createdAt,
+      last_updated_at: payload.createdAt,
+    });
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to create AI chat session:', error);
     throw error;
   }
 };
@@ -90,18 +100,23 @@ export const insertAIChatMessage = async (payload: {
   imageUrl?: string | null;
   isStreaming?: boolean;
 }) => {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase.from('chat_messages').insert({
-    id: payload.id,
-    session_id: payload.sessionId,
-    content: payload.content,
-    sender: payload.sender,
-    image_url: payload.imageUrl ?? null,
-    timestamp: payload.timestamp,
-    is_streaming: payload.isStreaming ?? false,
-  });
+  try {
+    const supabase: any = getSupabaseClient();
+    const { error } = await supabase.from('chat_messages').insert({
+      id: payload.id,
+      session_id: payload.sessionId,
+      content: payload.content,
+      sender: payload.sender,
+      image_url: payload.imageUrl ?? null,
+      timestamp: payload.timestamp,
+      is_streaming: payload.isStreaming ?? false,
+    });
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to insert AI chat message:', error);
     throw error;
   }
 };
@@ -110,13 +125,18 @@ export const updateAIChatMessage = async (messageId: string, updates: {
   content?: string;
   is_streaming?: boolean;
 }) => {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('chat_messages')
-    .update(updates)
-    .eq('id', messageId);
+  try {
+    const supabase: any = getSupabaseClient();
+    const { error } = await supabase
+      .from('chat_messages')
+      .update(updates)
+      .eq('id', messageId);
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to update AI chat message:', error);
     throw error;
   }
 };
@@ -125,26 +145,36 @@ export const updateAIChatSession = async (sessionId: string, updates: {
   title?: string;
   last_updated_at?: string;
 }) => {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('chat_sessions')
-    .update(updates)
-    .eq('id', sessionId);
+  try {
+    const supabase: any = getSupabaseClient();
+    const { error } = await supabase
+      .from('chat_sessions')
+      .update(updates)
+      .eq('id', sessionId);
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to update AI chat session:', error);
     throw error;
   }
 };
 
 export const deleteAIChatSession = async (sessionId: string, userId: string) => {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('chat_sessions')
-    .delete()
-    .eq('id', sessionId)
-    .eq('user_id', userId);
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('chat_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('user_id', userId);
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to delete AI chat session:', error);
     throw error;
   }
 };

@@ -33,13 +33,17 @@ export default function ModuleShell({
           <Icon name="arrow-left" size={20} color={colors.textSecondary} />
           <Text style={styles.backText} numberOfLines={1}>{projectName}</Text>
         </TouchableOpacity>
-        <View style={styles.titleRow}>
+
+        <View style={styles.titleCenter} pointerEvents="none">
           <View style={[styles.iconWrap, { backgroundColor: accentColor + '22' }]}>
             <Icon name={iconName} size={16} color={accentColor} />
           </View>
           <Text style={styles.title}>{title}</Text>
         </View>
-        {rightAction ? rightAction : <View style={{ width: 60 }} />}
+
+        <View style={styles.rightSlot}>
+          {rightAction}
+        </View>
       </View>
       {children}
     </SafeAreaView>
@@ -51,7 +55,6 @@ const styles = StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
@@ -59,7 +62,16 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs, flex: 1 },
   backText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600', flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  titleCenter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  rightSlot: { flexDirection: 'row', justifyContent: 'flex-end', flex: 1 },
   iconWrap: {
     width: 28,
     height: 28,

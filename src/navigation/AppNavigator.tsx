@@ -17,6 +17,7 @@ import SettingsScreen from '../screens/modules/SettingsScreen';
 import AskAIScreen from '../screens/modules/AskAIScreen';
 import FormsScreen from '../screens/modules/FormsScreen';
 import DigitalTwinsScreen from '../screens/modules/DigitalTwinsScreen';
+import ModelViewerScreen from '../screens/modules/ModelViewerScreen';
 import DWSSScreen from '../screens/modules/DWSSScreen';
 
 export type AppStackParamList = {
@@ -34,7 +35,7 @@ export type AppStackParamList = {
   AskAI: { projectId: string; projectName: string };
   Forms: { projectId: string; projectName: string };
   DigitalTwins: { projectId: string; projectName: string };
-  DigitalTwinDetail: { modelId: string; projectId: string };
+  ModelViewer: { modelId?: string; viewToken?: string; projectId?: string };
   DWSS: { projectId: string; projectName: string };
 };
 
@@ -118,8 +119,8 @@ export default function AppNavigator() {
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
-        name="DigitalTwinDetail"
-        component={DigitalTwinsScreen}
+        name="ModelViewer"
+        component={ModelViewerScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

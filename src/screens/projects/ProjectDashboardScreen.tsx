@@ -38,13 +38,14 @@ const NAV_MODULES: NavModule[] = [
     description: 'Dashboard & analytics',
     accentColor: colors.primary,
   },
+
   {
-    key: 'DigitalTwins',
-    label: 'Digital Twins',
-    icon: 'cube-outline',
+    key: 'ModelViewer',
+    label: '3D Model Viewer',
+    icon: 'view-3d',
     section: 'main',
-    description: '3D site models & visualization',
-    accentColor: '#7c3aed',
+    description: 'Direct BIMFACE 3D viewer',
+    accentColor: '#8b5cf6',
   },
   {
     key: 'Rfi',
@@ -86,14 +87,7 @@ const NAV_MODULES: NavModule[] = [
     description: 'Cleaning inspections',
     accentColor: '#10b981',
   },
-  {
-    key: 'DWSS',
-    label: 'DWSS',
-    icon: 'factory',
-    section: 'dwss',
-    description: 'Digital work site systems',
-    accentColor: '#06b6d4',
-  },
+ 
   {
     key: 'Forms',
     label: 'Forms',
@@ -111,14 +105,7 @@ const NAV_MODULES: NavModule[] = [
     accentColor: '#8b5cf6',
     roles: ['admin', 'projectManager', 'contractor'],
   },
-  {
-    key: 'AskAI',
-    label: 'Ask AI',
-    icon: 'brain',
-    section: 'management',
-    description: 'AI-powered project assistant',
-    accentColor: colors.primary,
-  },
+
   {
     key: 'Settings',
     label: 'Settings',
@@ -221,6 +208,14 @@ export default function ProjectDashboardScreen() {
         {renderSection('MANAGEMENT', 'management')}
         <View style={{ height: spacing.huge }} />
       </ScrollView>
+
+      {/* Floating Action Button for Ask AI */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('AskAI', { projectId, projectName })}
+        style={styles.fabButton}
+        activeOpacity={0.8}>
+        <Icon name="brain" size={24} color={colors.white} />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -312,4 +307,20 @@ const styles = StyleSheet.create({
   moduleLabel: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 2 },
   moduleLabelLocked: { color: colors.textMuted },
   moduleDesc: { color: colors.textMuted, fontSize: 12 },
+  fabButton: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    bottom: spacing.xl + 10,
+    right: spacing.xl,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
 });
