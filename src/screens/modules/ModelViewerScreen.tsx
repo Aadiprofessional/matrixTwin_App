@@ -710,13 +710,13 @@ export default function ModelViewerScreen({ route, navigation }: ModelViewerScre
           ) : isResolvingToken ? (
             <View style={styles.loadingContainerSolid}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Fetching BIMFACE token...</Text>
+              <Text style={styles.loadingText}>Fetching view token...</Text>
             </View>
           ) : (
             <View style={styles.placeholderContainer}>
               <Ionicons name="cube-outline" size={64} color={colors.textSecondary} />
               <Text style={styles.placeholderText}>No view token provided</Text>
-              <Text style={styles.placeholderSubtext}>Please provide a valid BIMFACE view token</Text>
+              <Text style={styles.placeholderSubtext}>Please provide a valid view token</Text>
               <Text style={styles.placeholderSubtext}>Model ID: {workingModelId || 'None'}</Text>
               <Text style={styles.placeholderSubtext}>Token Loading: {tokenLoading ? 'Yes' : 'No'}</Text>
               <Text style={styles.placeholderSubtext}>Token Error: {tokenError ? 'Yes' : 'No'}</Text>

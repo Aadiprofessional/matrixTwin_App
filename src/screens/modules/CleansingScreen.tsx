@@ -150,7 +150,6 @@ export default function CleansingScreen() {
       title="Cleansing Records"
       iconName="broom"
       accentColor={ACCENT}
-      projectName={projectName}
       rightAction={
         <TouchableOpacity style={[styles.addBtn, { backgroundColor: ACCENT }]} onPress={() => setShowModal(true)}>
           <Icon name="plus" size={16} color="#fff" />

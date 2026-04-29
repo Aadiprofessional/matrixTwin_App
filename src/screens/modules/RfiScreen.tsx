@@ -258,7 +258,7 @@ export default function RfiScreen() {
   );
 
   return (
-    <ModuleShell title="RFI / RICS" iconName="file-question-outline" accentColor={ACCENT} projectName={projectName}>
+    <ModuleShell title="RFI / RICS" iconName="file-question-outline" accentColor={ACCENT}>
       {loading ? (
         <ActivityIndicator color={ACCENT} style={{ flex: 1, marginTop: 40 }} />
       ) : (

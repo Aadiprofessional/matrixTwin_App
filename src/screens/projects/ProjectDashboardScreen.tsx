@@ -44,7 +44,7 @@ const NAV_MODULES: NavModule[] = [
     label: 'Digital Twin',
     icon: 'cube-outline',
     section: 'main',
-    description: 'Direct BIMFACE 3D viewer',
+    description: 'Direct 3D viewer',
     accentColor: '#8b5cf6',
   },
   {

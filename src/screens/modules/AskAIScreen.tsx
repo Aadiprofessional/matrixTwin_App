@@ -1007,11 +1007,6 @@ export default function AskAIScreen() {
 
     return (
       <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
-        {!isUser ? (
-          <View style={styles.aiAvatar}>
-            <Icon name="brain" size={14} color={ACCENT} />
-          </View>
-        ) : null}
         <View style={styles.messageStack}>
           <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
             {isUser ? (
@@ -1230,7 +1225,6 @@ export default function AskAIScreen() {
                 <View style={styles.skeletonRowRightSmall} />
               </View>
             </SkeletonPlaceholder>
-            <Text style={styles.loadingText}>Loading chats...</Text>
           </View>
         ) : (
           <FlatList
@@ -1542,7 +1536,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   messageRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  messageStack: { maxWidth: '95%' },
+  messageStack: { maxWidth: '100%' },
   userRow: { justifyContent: 'flex-end' },
   assistantRow: { justifyContent: 'flex-start' },
   aiAvatar: {

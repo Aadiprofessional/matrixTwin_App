@@ -602,7 +602,7 @@ export default function DiaryScreen() {
   );
 
   return (
-    <ModuleShell title="Site Diary" iconName="book-open-outline" accentColor={ACCENT} projectName={projectName} rightAction={navActions}>
+    <ModuleShell title="Site Diary" iconName="book-open-outline" accentColor={ACCENT} rightAction={navActions}>
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}

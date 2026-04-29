@@ -10,7 +10,6 @@ interface Props {
   title: string;
   iconName: string;
   accentColor?: string;
-  projectName: string;
   rightAction?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -19,7 +18,6 @@ export default function ModuleShell({
   title,
   iconName,
   accentColor = colors.primary,
-  projectName,
   rightAction,
   children,
 }: Props) {
@@ -31,7 +29,6 @@ export default function ModuleShell({
       <View style={styles.navBar}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color={colors.textSecondary} />
-          <Text style={styles.backText} numberOfLines={1}>{projectName}</Text>
         </TouchableOpacity>
 
         <View style={styles.titleCenter} pointerEvents="none">
@@ -61,7 +58,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs, flex: 1 },
-  backText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600', flex: 1 },
   titleCenter: {
     position: 'absolute',
     left: 0,

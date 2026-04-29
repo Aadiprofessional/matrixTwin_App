@@ -379,8 +379,7 @@ export default function FormsScreen() {
     <ModuleShell
       title="Forms"
       iconName="file-document-multiple-outline"
-      accentColor={ACCENT}
-      projectName={projectName}>
+      accentColor={ACCENT}>
       <View style={styles.tabRow}>
         {(['templates', 'entries'] as const).map(tab => (
           <TouchableOpacity

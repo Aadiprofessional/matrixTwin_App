@@ -165,7 +165,7 @@ export default function SafetyScreen() {
   };
 
   return (
-    <ModuleShell title="Safety Inspections" iconName="shield-check-outline" accentColor={ACCENT} projectName={projectName}
+    <ModuleShell title="Safety Inspections" iconName="shield-check-outline" accentColor={ACCENT}
       rightAction={
         <TouchableOpacity style={[S.addBtn, { backgroundColor: ACCENT }]} onPress={() => setShowCreate(true)}>
           <Icon name="plus" size={16} color="#fff" /><Text style={S.addBtnText}>New</Text>

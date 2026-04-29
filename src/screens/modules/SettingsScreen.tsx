@@ -31,7 +31,7 @@ export default function SettingsScreen() {
   ];
 
   return (
-    <ModuleShell title="Settings" iconName="cog" projectName={projectName}>
+    <ModuleShell title="Settings" iconName="cog">
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
         {rows.map(r => (

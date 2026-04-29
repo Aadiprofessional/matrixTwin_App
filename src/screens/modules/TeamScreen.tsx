@@ -58,7 +58,7 @@ export default function TeamScreen() {
   };
 
   return (
-    <ModuleShell title="Team Management" iconName="people" projectName={projectName}>
+    <ModuleShell title="Team Management" iconName="people">
       <View style={styles.toolbar}>
         <Text style={styles.count}>{members.length} members</Text>
       </View>

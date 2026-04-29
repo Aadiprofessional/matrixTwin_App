@@ -168,7 +168,7 @@ export default function LabourScreen() {
   };
 
   return (
-    <ModuleShell title="Labour Tracking" iconName="account-group-outline" accentColor={ACCENT} projectName={projectName}
+    <ModuleShell title="Labour Tracking" iconName="account-group-outline" accentColor={ACCENT}
       rightAction={
         <TouchableOpacity style={[S.addBtn, { backgroundColor: ACCENT }]} onPress={() => setShowCreate(true)}>
           <Icon name="plus" size={16} color="#fff" /><Text style={S.addBtnText}>New Log</Text>
