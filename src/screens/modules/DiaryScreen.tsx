@@ -4,7 +4,8 @@ import {
   ActivityIndicator, Modal, TextInput, Alert, ScrollView,
   KeyboardAvoidingView, Platform, Dimensions, Linking
 } from 'react-native';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
@@ -15,7 +16,7 @@ import {
   renameDiary, sendNodeReminder
 } from '../../api/diary';
 import { useAuthStore } from '../../store/authStore';
-import ModuleShell from './ModuleShell';
+
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 import { getProjectMembers, ProjectMember, TeamMember } from '../../api/team';
@@ -70,6 +71,7 @@ function workflowStatusLabel(s: string) {
 
 export default function DiaryScreen() {
   const route = useRoute<RouteProps>();
+  const navigation = useNavigation();
   const { projectId, projectName } = route.params;
   const { user } = useAuthStore();
 
@@ -97,6 +99,15 @@ export default function DiaryScreen() {
   const [updatingExpiryStatus, setUpdatingExpiryStatus] = useState<Record<string, boolean>>({});
   const [renamingDiary, setRenamingDiary] = useState<Record<string, boolean>>({});
   const [sendingNodeReminder, setSendingNodeReminder] = useState<Record<string, boolean>>({});
+  const [workflowComment, setWorkflowComment] = useState('');
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameEntry, setRenameEntry] = useState<FullEntry | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [reminderEntry, setReminderEntry] = useState<FullEntry | null>(null);
+  const [reminderNode, setReminderNode] = useState<WorkflowNode | null>(null);
+  const [reminderNodeOrder, setReminderNodeOrder] = useState(0);
+  const [reminderMessage, setReminderMessage] = useState('');
   
   const [pendingFormData, setPendingFormData] = useState<SiteDiaryFormData | null>(null);
   const [pendingDiaryName, setPendingDiaryName] = useState('');
@@ -157,25 +168,10 @@ export default function DiaryScreen() {
 
   const handleWorkflowAction = async (action: 'approve'|'reject'|'back') => {
     if (!selectedEntry || !user?.id) return;
-    let comment = '';
-    if (action === 'reject' || action === 'back') {
-      await new Promise<void>((resolve) => {
-        Alert.prompt(
-          action === 'reject' ? 'Reason for Rejection' : 'Send Back Comment',
-          'Please provide a reason:',
-          [
-            { text: 'Cancel', onPress: () => resolve(), style: 'cancel' },
-            { text: 'Submit', onPress: (val?: string) => { comment = val || ''; resolve(); } },
-          ],
-          'plain-text',
-        );
-      });
-      if (!comment.trim()) { Alert.alert('Required', 'A comment is required.'); return; }
-    }
     setActionLoading(true);
     try {
-      await updateDiaryWorkflowAction(selectedEntry.id, { action, comment, userId: user.id });
-      Alert.alert('Success', `Entry ${action}d successfully.`);
+      await updateDiaryWorkflowAction(selectedEntry.id, { action, comment: workflowComment, userId: user.id });
+      setWorkflowComment('');
       await fetchEntries();
       await openDetail(selectedEntry);
     } catch (e: any) {
@@ -342,54 +338,41 @@ export default function DiaryScreen() {
     setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: false }));
   };
 
-  const handleRenameDiary = async (entry: FullEntry) => {
+  const handleRenameDiary = (entry: FullEntry) => {
     if (!user?.id || user.role !== 'admin') return;
-    const currentName = entry.name || entry.form_number || entry.id;
-    let nextName = '';
-    await new Promise<void>((resolve) => {
-      Alert.prompt(
-        'Rename Diary',
-        'Enter new diary name:',
-        [
-          { text: 'Cancel', onPress: () => resolve(), style: 'cancel' },
-          { text: 'Rename', onPress: (val?: string) => { nextName = (val || '').trim(); resolve(); } },
-        ],
-        'plain-text',
-        currentName
-      );
-    });
-    if (!nextName) return;
-    try {
-      setRenamingDiary(prev => ({ ...prev, [entry.id]: true }));
-      await renameDiary(entry.id, user.id, nextName);
-      fetchEntries();
-      if (selectedEntry?.id === entry.id) await openDetail(entry);
-    } catch (e) { Alert.alert('Error', 'Failed to rename diary'); }
-    setRenamingDiary(prev => ({ ...prev, [entry.id]: false }));
+    setRenameEntry(entry);
+    setRenameValue(entry.name || entry.form_number || '');
+    setShowRenameModal(true);
   };
 
-  const handleNodeReminder = async (entry: FullEntry, node: WorkflowNode, nodeOrder: number) => {
+  const saveRename = async () => {
+    if (!renameEntry || !user?.id) return;
+    try {
+      setRenamingDiary(prev => ({ ...prev, [renameEntry.id]: true }));
+      await renameDiary(renameEntry.id, user.id, renameValue);
+      setShowRenameModal(false);
+      fetchEntries();
+      if (selectedEntry?.id === renameEntry.id) await openDetail(renameEntry);
+    } catch (e) { Alert.alert('Error', 'Failed to rename diary'); }
+    setRenamingDiary(prev => ({ ...prev, [renameEntry!.id]: false }));
+  };
+
+  const handleNodeReminder = (entry: FullEntry, node: WorkflowNode, nodeOrder: number) => {
     if (!user?.id || user.role !== 'admin') return;
-    const defaultMessage = `Reminder: Please action "${node.node_name}" step.`;
-    let message = '';
-    await new Promise<void>((resolve) => {
-      Alert.prompt(
-        'Send Reminder',
-        'Enter reminder message for this step:',
-        [
-          { text: 'Cancel', onPress: () => resolve(), style: 'cancel' },
-          { text: 'Send', onPress: (val?: string) => { message = (val || '').trim() || defaultMessage; resolve(); } },
-        ],
-        'plain-text',
-        defaultMessage,
-      );
-    });
-    if (!message) return;
-    const key = `${entry.id}-${nodeOrder}`;
+    setReminderEntry(entry);
+    setReminderNode(node);
+    setReminderNodeOrder(nodeOrder);
+    setReminderMessage(`Reminder: Please action "${node.node_name}" step.`);
+    setShowReminderModal(true);
+  };
+
+  const sendReminder = async () => {
+    if (!reminderEntry || !user?.id) return;
+    const key = `${reminderEntry.id}-${reminderNodeOrder}`;
     try {
       setSendingNodeReminder(prev => ({ ...prev, [key]: true }));
-      await sendNodeReminder(entry.id, nodeOrder, user.id, message);
-      Alert.alert('Success', 'Reminder sent successfully.');
+      await sendNodeReminder(reminderEntry.id, reminderNodeOrder, user.id, reminderMessage);
+      setShowReminderModal(false);
     } catch (e) { Alert.alert('Error', 'Failed to send reminder'); }
     setSendingNodeReminder(prev => ({ ...prev, [key]: false }));
   };
@@ -527,20 +510,6 @@ export default function DiaryScreen() {
       <Text style={S.pageDesc}>
         Manage daily site logs with faster scanning, stronger status visibility, and cleaner project context.
       </Text>
-      <View style={{ alignSelf: 'flex-start' }}>
-        <View style={S.projectChip}>
-          <Icon name="office-building" size={14} color="#e2ebcf" style={{ marginRight: 6 }} />
-          <Text style={S.projectChipText}>Project: {projectName}</Text>
-        </View>
-      </View>
-      
-      <View style={S.statsBox}>
-        <View style={S.statItem}><Text style={S.statLabel}>Total</Text><Text style={S.statValue}>{total}</Text></View>
-        <View style={S.statItem}><Text style={S.statLabel}>This Week</Text><Text style={S.statValue}>{thisWeek}</Text></View>
-        <View style={S.statItem}><Text style={S.statLabel}>Pending</Text><Text style={S.statValue}>{pending}</Text></View>
-        <View style={S.statItem}><Text style={S.statLabel}>Completed</Text><Text style={S.statValue}>{completed}</Text></View>
-        <View style={[S.statItem, { borderRightWidth: 0 }]}><Text style={S.statLabel}>Contributors</Text><Text style={S.statValue}>{contributors}</Text></View>
-      </View>
 
       <View style={S.searchRow}>
         <View style={S.searchInputWrap}>
@@ -602,7 +571,22 @@ export default function DiaryScreen() {
   );
 
   return (
-    <ModuleShell title="Site Diary" iconName="book-open-outline" accentColor={ACCENT} rightAction={navActions}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="arrow-left" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900' }}>Site Diary</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{projectName}</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <TouchableOpacity onPress={() => setShowReport(true)} style={{ backgroundColor: '#2a2a2a', borderRadius: radius.lg, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}><Icon name="file-chart-outline" size={20} color={colors.textMuted} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowCreate(true)} style={{ backgroundColor: ACCENT, borderRadius: radius.lg, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}><Icon name="plus" size={20} color="#fff" /></TouchableOpacity>
+        </View>
+      </View>
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
@@ -721,6 +705,7 @@ export default function DiaryScreen() {
 
                 {canApprove(selectedEntry) && (
                   <View style={S.approveActions}>
+                    <TextInput style={[S.input, { marginBottom: spacing.sm }]} value={workflowComment} onChangeText={setWorkflowComment} placeholder="Comment (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
                      <TouchableOpacity style={[S.approveBtn, { backgroundColor: '#4CAF50' }]} onPress={() => handleWorkflowAction('approve')}>
                        <Text style={S.approveBtnText}>Approve</Text>
                      </TouchableOpacity>
@@ -932,9 +917,37 @@ export default function DiaryScreen() {
         </View>
       </Modal>
 
+      {/* Rename Modal */}
+      <Modal visible={showRenameModal} animationType="fade" transparent>
+        <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.8)', justifyContent:'center', alignItems:'center', padding: spacing.lg }}>
+          <View style={{ backgroundColor:'#111', borderRadius: radius.lg, borderWidth:1, borderColor:'#222', padding: spacing.lg, width:'100%' }}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight:'800', marginBottom: spacing.md }}>Rename Diary</Text>
+            <TextInput style={{ backgroundColor:'#0d0d0d', color: colors.text, borderRadius: radius.md, borderWidth:1, borderColor:'#222', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize:14, marginBottom: spacing.md }} value={renameValue} onChangeText={setRenameValue} placeholder="New name..." placeholderTextColor={colors.textMuted} />
+            <View style={{ flexDirection:'row', gap: spacing.sm }}>
+              <TouchableOpacity style={{ flex:1, alignItems:'center', paddingVertical: spacing.sm, borderRadius: radius.lg, borderWidth:1, borderColor:'#222' }} onPress={() => setShowRenameModal(false)}><Text style={{ color: colors.textMuted, fontWeight:'700' }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={{ flex:1, alignItems:'center', paddingVertical: spacing.sm, borderRadius: radius.lg, backgroundColor: ACCENT }} onPress={saveRename}><Text style={{ color:'#fff', fontWeight:'700' }}>Save</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reminder Modal */}
+      <Modal visible={showReminderModal} animationType="fade" transparent>
+        <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.8)', justifyContent:'center', alignItems:'center', padding: spacing.lg }}>
+          <View style={{ backgroundColor:'#111', borderRadius: radius.lg, borderWidth:1, borderColor:'#222', padding: spacing.lg, width:'100%' }}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight:'800', marginBottom: spacing.md }}>Send Reminder</Text>
+            <TextInput style={{ backgroundColor:'#0d0d0d', color: colors.text, borderRadius: radius.md, borderWidth:1, borderColor:'#222', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize:14, marginBottom: spacing.md, minHeight:80, textAlignVertical:'top' }} value={reminderMessage} onChangeText={setReminderMessage} placeholder="Reminder message..." placeholderTextColor={colors.textMuted} multiline numberOfLines={3} />
+            <View style={{ flexDirection:'row', gap: spacing.sm }}>
+              <TouchableOpacity style={{ flex:1, alignItems:'center', paddingVertical: spacing.sm, borderRadius: radius.lg, borderWidth:1, borderColor:'#222' }} onPress={() => setShowReminderModal(false)}><Text style={{ color: colors.textMuted, fontWeight:'700' }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={{ flex:1, alignItems:'center', paddingVertical: spacing.sm, borderRadius: radius.lg, backgroundColor: ACCENT }} onPress={sendReminder}><Text style={{ color:'#fff', fontWeight:'700' }}>Send</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <PeopleSelectorModal isOpen={showPeopleSelector} onClose={() => setShowPeopleSelector(false)} users={projectMembers} onSelect={handleUserSelection} title={peopleSelectorType === 'executor' ? 'Select Executor' : 'Add CC Recipient'} />
       <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} history={historyData} onRestore={handleRestoreHistory} onView={(h) => { setSelectedHistoryEntry(h); setShowHistory(false); setShowHistoryForm(true); }} />
-    </ModuleShell>
+    </SafeAreaView>
   );
 }
 

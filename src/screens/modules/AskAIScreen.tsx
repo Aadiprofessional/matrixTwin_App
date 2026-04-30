@@ -1129,16 +1129,20 @@ export default function AskAIScreen() {
                     />
                   </TouchableOpacity>
                 ) : null}
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => handleCopyMessage(item.content)}>
-                  <Icon name="content-copy" size={13} color={colors.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => handleShareMessage(item.content)}>
-                  <Icon name="share-variant-outline" size={13} color={colors.textMuted} />
-                </TouchableOpacity>
+                {!item.isStreaming ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => handleCopyMessage(item.content)}>
+                      <Icon name="content-copy" size={13} color={colors.textMuted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => handleShareMessage(item.content)}>
+                      <Icon name="share-variant-outline" size={13} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </>
+                ) : null}
               </View>
             ) : null}
             <Text style={[styles.msgTime, isUser ? styles.userMsgTime : null]}>
@@ -1293,71 +1297,83 @@ export default function AskAIScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      <Modal visible={showHistory} animationType="slide" transparent>
-        <View style={styles.historyOverlay}>
-          <View style={styles.historySheet}>
-            <View style={styles.historyHeader}>
-              <Text style={styles.historyTitle}>Chat History</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)}>
-                <Icon name="close" size={22} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            {projectSessions.length === 0 ? (
-              <View style={styles.historyEmpty}>
-                <Icon name="history" size={40} color={colors.border} />
-                <Text style={styles.historyEmptyText}>No previous chats</Text>
-                <Text style={styles.historyEmptySubText}>
-                  Start a new conversation to save project-specific history.
-                </Text>
+      <Modal visible={showHistory} animationType="fade" transparent>
+        <TouchableOpacity 
+          style={styles.historyOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowHistory(false)}>
+          <TouchableOpacity 
+            style={styles.historyOverlayInner} 
+            activeOpacity={1}
+            onPress={e => e.stopPropagation()}>
+            <SafeAreaView style={styles.historySheet} edges={['top', 'bottom', 'left', 'right']}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyTitle}>Chat History</Text>
+                <TouchableOpacity onPress={() => setShowHistory(false)}>
+                  <Icon name="close" size={22} color={colors.textMuted} />
+                </TouchableOpacity>
               </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {projectSessions.map(session => (
-                  <TouchableOpacity
-                    key={session.id}
-                    style={[
-                      styles.historyItem,
-                      currentSessionId === session.id ? styles.historyItemActive : null,
-                    ]}
-                    onPress={() => switchToSession(session)}>
-                    <View style={styles.historyIconWrap}>
-                      <Icon name="chat-outline" size={16} color={ACCENT} />
-                    </View>
-                    <View style={styles.historyMeta}>
-                      <Text style={styles.historyItemTitle} numberOfLines={1}>
-                        {session.title}
-                      </Text>
-                      <Text style={styles.historyItemDate}>
-                        {new Date(session.lastUpdatedAt).toLocaleDateString()} ·{' '}
-                        {session.messages.filter(message => message.sender === 'user').length} messages
-                      </Text>
-                    </View>
+
+              {projectSessions.length === 0 ? (
+                <View style={styles.historyEmpty}>
+                  <Icon name="history" size={40} color={colors.border} />
+                  <Text style={styles.historyEmptyText}>No previous chats</Text>
+                  <Text style={styles.historyEmptySubText}>
+                    Start a new conversation to save project-specific history.
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                  {projectSessions.map(session => (
                     <TouchableOpacity
-                      disabled={deletingSessionId === session.id}
-                      onPress={() =>
-                        Alert.alert('Delete Chat', 'Remove this saved chat history?', [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Delete',
-                            style: 'destructive',
-                            onPress: () => handleDeleteSession(session),
-                          },
-                        ])
-                      }
-                      style={styles.historyDeleteBtn}>
-                      {deletingSessionId === session.id ? (
-                        <ActivityIndicator size="small" color={colors.error} />
-                      ) : (
-                        <Icon name="delete-outline" size={18} color={colors.error} />
-                      )}
+                      key={session.id}
+                      style={[
+                        styles.historyItem,
+                        currentSessionId === session.id ? styles.historyItemActive : null,
+                      ]}
+                      onPress={() => switchToSession(session)}>
+                      <View style={styles.historyIconWrap}>
+                        <Icon name="chat-outline" size={16} color={ACCENT} />
+                      </View>
+                      <View style={styles.historyMeta}>
+                        <Text style={styles.historyItemTitle} numberOfLines={1}>
+                          {session.title}
+                        </Text>
+                        <Text style={styles.historyItemDate}>
+                          {new Date(session.lastUpdatedAt).toLocaleDateString()} ·{' '}
+                          {new Date(session.lastUpdatedAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })} ·{' '}
+                          {session.messages.filter(message => message.sender === 'user').length} messages
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        disabled={deletingSessionId === session.id}
+                        onPress={() =>
+                          Alert.alert('Delete Chat', 'Remove this saved chat history?', [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: () => handleDeleteSession(session),
+                            },
+                          ])
+                        }
+                        style={styles.historyDeleteBtn}>
+                        {deletingSessionId === session.id ? (
+                          <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                          <Icon name="delete-outline" size={18} color={colors.error} />
+                        )}
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
+                  ))}
+                </ScrollView>
+              )}
+            </SafeAreaView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <Modal visible={Boolean(previewAttachment)} animationType="slide">
@@ -1834,8 +1850,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingBottom: spacing.md,
     gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     backgroundColor: colors.background,
   },
   inputWrap: {
@@ -1884,13 +1898,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'flex-end',
+    flexDirection: 'row',
+  },
+  historyOverlayInner: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   historySheet: {
     backgroundColor: '#0d0d0d',
     borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 24,
     padding: spacing.xl,
-    maxHeight: '72%',
+    width: '85%',
+    maxWidth: 400,
+    height: '100%',
   },
   historyHeader: {
     flexDirection: 'row',
