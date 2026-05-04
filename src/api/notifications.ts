@@ -1,66 +1,55 @@
 import client from './client';
 
+// Matches the website's notification interface (same server, same fields)
 export interface Notification {
   id: string;
-  userId: string;
-  type: 'form_assigned' | 'form_completed' | 'form_rejected' | 'workflow_update' | 'team_invitation' | 'project_update' | 'safety_alert' | 'system';
+  user_id: string;
   title: string;
   message: string;
-  data?: Record<string, any>;
+  type: 'info' | 'warning' | 'success' | 'error';
+  form_type?: string;
+  form_id?: string;
+  project_id?: string;
+  action_url?: string;
+  metadata?: Record<string, any>;
   read: boolean;
-  readAt?: string;
-  createdAt: string;
-  actionUrl?: string;
+  read_at?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface NotificationResponse {
-  id: string;
-  userId: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-  type: string;
-}
-
-export interface NotificationStats {
+  notifications: Notification[];
   unreadCount: number;
-  totalCount: number;
-  byType: Record<string, number>;
+  page: number;
+  limit: number;
 }
 
-// GET /notifications
-export const getNotifications = (limit: number = 20, offset: number = 0): Promise<Notification[]> =>
-  client.get('/notifications', { params: { limit, offset } }).then(r => r.data);
+// GET /notifications?page=1&limit=20&unread_only=false
+export const getNotifications = (params?: {
+  page?: number;
+  limit?: number;
+  unread_only?: boolean;
+}): Promise<NotificationResponse> => {
+  const p: Record<string, any> = {};
+  if (params?.page) p.page = params.page;
+  if (params?.limit) p.limit = params.limit;
+  if (params?.unread_only) p.unread_only = params.unread_only;
+  return client.get('/notifications', { params: p }).then(r => r.data);
+};
 
-// GET /notifications/unread
-export const getUnreadNotifications = (): Promise<Notification[]> =>
-  client.get('/notifications/unread').then(r => r.data);
-
-// GET /notifications/stats
-export const getNotificationStats = (): Promise<NotificationStats> =>
-  client.get('/notifications/stats').then(r => r.data);
-
-// PUT /notifications/:id/read
-export const markNotificationAsRead = (id: string): Promise<Notification> =>
-  client.put(`/notifications/${id}/read`, {}).then(r => r.data);
+// POST /notifications/mark-read/:id  (matches website)
+export const markNotificationAsRead = (id: string): Promise<void> =>
+  client.post(`/notifications/mark-read/${id}`).then(() => undefined);
 
 // POST /notifications/mark-all-read
-export const markAllNotificationsAsRead = (): Promise<any> =>
-  client.post('/notifications/mark-all-read', {}).then(r => r.data);
+export const markAllNotificationsAsRead = (): Promise<void> =>
+  client.post('/notifications/mark-all-read').then(() => undefined);
 
 // DELETE /notifications/:id
-export const deleteNotification = (id: string): Promise<any> =>
-  client.delete(`/notifications/${id}`).then(r => r.data);
+export const deleteNotification = (id: string): Promise<void> =>
+  client.delete(`/notifications/${id}`).then(() => undefined);
 
-// DELETE /notifications
-export const deleteAllNotifications = (): Promise<any> =>
-  client.delete('/notifications').then(r => r.data);
-
-// POST /notifications/subscribe
-export const subscribeToNotifications = (deviceToken: string, platform: string): Promise<any> =>
-  client.post('/notifications/subscribe', { deviceToken, platform }).then(r => r.data);
-
-// POST /notifications/unsubscribe
-export const unsubscribeFromNotifications = (deviceToken: string): Promise<any> =>
-  client.post('/notifications/unsubscribe', { deviceToken }).then(r => r.data);
+// DELETE /notifications/clear-all  (matches website)
+export const clearAllNotifications = (): Promise<void> =>
+  client.delete('/notifications/clear-all').then(() => undefined);

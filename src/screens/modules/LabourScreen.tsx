@@ -14,6 +14,9 @@ import MonthlyReturnTemplateRN from '../../components/forms/MonthlyReturnTemplat
 import { getProjectMembers, ProjectMember, TeamMember } from '../../api/team';
 import ProcessFlowBuilder from '../../components/forms/ProcessFlowBuilder';
 import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
+import { FormEntryCard, CardMetrics } from '../../components/ui/FormEntryCard';
+import ModuleDetailModal from '../../components/ui/ModuleDetailModal';
+import HistoryModal from '../../components/ui/HistoryModal';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
@@ -123,7 +126,7 @@ interface FullEntry {
   workers_count: number; hours_worked: number; tasks_completed: string; notes?: string;
   status: string; created_at: string; project_id?: string; name?: string; expires_at?: string;
   labour_workflow_nodes?: WorkflowNode[]; labour_comments?: Comment[];
-  current_node_index?: number;
+  current_node_index?: number; form_data?: any;
 }
 
 export default function LabourScreen() {
@@ -152,6 +155,11 @@ export default function LabourScreen() {
   const [showRename, setShowRename] = useState(false);
   const [renameEntry, setRenameEntry] = useState<FullEntry | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showFormView, setShowFormView] = useState(false);
+  // Expiry per-card state
+  const [expiryDrafts, setExpiryDrafts] = useState<Record<string, string>>({});
+  const [savingExpiry, setSavingExpiry] = useState<Record<string, boolean>>({});
+  const [updatingExpiryStatus, setUpdatingExpiryStatus] = useState<Record<string, boolean>>({});
 
   const [showMonthlyForm, setShowMonthlyForm] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<any | null>(null);
@@ -284,6 +292,26 @@ export default function LabourScreen() {
     ]);
   };
 
+  const handleCardSetExpiry = async (entry: FullEntry, draft: string) => {
+    if (!user?.id || !isAdmin || !draft) return;
+    try {
+      setSavingExpiry(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/labour/${entry.id}/expiry`, { expiresAt: new Date(draft).toISOString() });
+      fetchEntries();
+    } catch { Alert.alert('Error', 'Failed to set expiry'); }
+    setSavingExpiry(prev => ({ ...prev, [entry.id]: false }));
+  };
+
+  const handleCardSetExpiryStatus = async (entry: FullEntry, status: 'active' | 'expired') => {
+    if (!user?.id || !isAdmin) return;
+    try {
+      setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/labour/${entry.id}/expiry-status`, { status });
+      fetchEntries();
+    } catch { Alert.alert('Error', 'Failed to update status'); }
+    setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: false }));
+  };
+
   const filtered = entries.filter(e => {
     const q = searchQuery.toLowerCase();
     if (q && !e.supervisor?.toLowerCase().includes(q) && !e.trade?.toLowerCase().includes(q) && !(e as any).name?.toLowerCase().includes(q)) return false;
@@ -361,7 +389,7 @@ export default function LabourScreen() {
           { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
           { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
           { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
-        ] as const).map(({ key, icon, count }) => {
+        ] as const).map(({ key, icon, count, label }) => {
           const active = filterStatus === key;
           return (
             <TouchableOpacity
@@ -371,6 +399,7 @@ export default function LabourScreen() {
             >
               <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
               <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -384,14 +413,39 @@ export default function LabourScreen() {
           ListHeaderComponent={() => <View style={{ height: 0 }} />}
           contentContainerStyle={S.listContent}
           renderItem={({ item }) => (
-            <LabourCard
-              item={item}
+            <FormEntryCard
+              date={dayjs(item.date || item.created_at).format('YYYY-MM-DD')}
+              title={item.name || item.form_number || `Labour-${(item.id || '').slice(-6)}`}
+              status={item.status}
+              accentColor={ACCENT}
+              expiresAt={item.expires_at}
+              metaItems={[
+                { icon: 'account-tie-outline', text: item.supervisor || '—' },
+                { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.slice(0, 8)}` },
+              ]}
               isAdmin={isAdmin}
+              expiryDraft={expiryDrafts[item.id] || ''}
+              onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
+              onSetExpiry={() => handleCardSetExpiry(item, expiryDrafts[item.id] || '')}
+              savingExpiry={!!savingExpiry[item.id]}
+              onSetExpired={() => handleCardSetExpiryStatus(item, 'expired')}
+              updatingExpiry={!!updatingExpiryStatus[item.id]}
+              onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
               onViewDetails={() => { setSelectedEntry(item); setLoadingDetail(true); setShowDetail(true); client.get(`/labour/${item.id}`).then(r => { setSelectedEntry(r.data); setLoadingDetail(false); }).catch(() => setLoadingDetail(false)); }}
               onHistory={() => openHistory(item)}
-              onDelete={() => handleDelete(item)}
+              showEdit={isAdmin || item.status === 'rejected'}
+              onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
               onRename={() => openRename(item)}
-            />
+              onDelete={() => handleDelete(item)}
+            >
+              <CardMetrics
+                items={[
+                  { label: 'Trade', value: item.trade || '—', color: ACCENT },
+                  { label: 'Workers', value: String(item.workers_count ?? '—') },
+                  { label: 'Hours', value: String(item.hours_worked ?? '—') },
+                ]}
+              />
+            </FormEntryCard>
           )}
           ListEmptyComponent={
             <View style={S.empty}>
@@ -403,105 +457,66 @@ export default function LabourScreen() {
       )}
 
       {/* Detail Modal */}
-      <Modal visible={showDetail && !!selectedEntry} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Labour Log Details</Text>
-              <TouchableOpacity onPress={() => setShowDetail(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            {loadingDetail ? <ActivityIndicator color={ACCENT} style={{ margin: 40 }} /> : selectedEntry ? (
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}>
-                <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md }}>
-                  <MetricBox label="Workers" value={String(selectedEntry.workers_count)} />
-                  <MetricBox label="Hours" value={String(selectedEntry.hours_worked)} />
-                  <MetricBox label="Trade" value={selectedEntry.trade} color={ACCENT} />
-                </View>
-                <DField label="Date" value={dayjs(selectedEntry.date).format('DD MMM YYYY')} />
-                <DField label="Supervisor" value={selectedEntry.supervisor} />
-                <DField label="Tasks Completed" value={selectedEntry.tasks_completed} />
-                <DField label="Notes" value={selectedEntry.notes} />
+      <ModuleDetailModal
+        visible={showDetail && !!selectedEntry}
+        onClose={() => setShowDetail(false)}
+        title={selectedEntry?.name || selectedEntry?.form_number || 'Labour Log Details'}
+        accentColor={ACCENT}
+        loading={loadingDetail}
+        status={selectedEntry?.status}
+        metrics={selectedEntry ? [
+          { label: 'Workers', value: String(selectedEntry.workers_count ?? '—'), color: ACCENT },
+          { label: 'Hours', value: String(selectedEntry.hours_worked ?? '—') },
+          { label: 'Trade', value: selectedEntry.trade || '—' },
+        ] : []}
+        fields={selectedEntry ? [
+          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY') },
+          { label: 'Supervisor', value: selectedEntry.supervisor },
+          { label: 'Tasks Completed', value: selectedEntry.tasks_completed },
+          { label: 'Notes', value: selectedEntry.notes },
+        ] : []}
+        workflowNodes={(selectedEntry?.labour_workflow_nodes || []) as any}
+        currentNodeIndex={selectedEntry?.current_node_index || 0}
+        comments={(selectedEntry?.labour_comments || []) as any}
+        canApprove={selectedEntry ? canApprove(selectedEntry) : false}
+        actionLoading={actionLoading}
+        workflowComment={workflowComment}
+        onWorkflowCommentChange={setWorkflowComment}
+        onApprove={() => handleWorkflowAction('approve')}
+        onSendBack={() => handleWorkflowAction('back')}
+        onReject={() => handleWorkflowAction('reject')}
+        canEditForm={isAdmin || selectedEntry?.status === 'rejected'}
+        onEditForm={() => { setShowDetail(false); setShowFormView(true); }}
+        onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
+        onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+      />
 
-                {(selectedEntry.labour_workflow_nodes || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>WORKFLOW</Text>
-                    {[...selectedEntry.labour_workflow_nodes!].sort((a,b)=>a.node_order-b.node_order).map((node, idx) => (
-                      <View key={node.id} style={D.nodeRow}>
-                        <View style={[D.nodeDot, { backgroundColor: idx < (selectedEntry.current_node_index ?? 0) ? '#22c55e' : idx === (selectedEntry.current_node_index ?? 0) ? ACCENT : '#333' }]} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={D.nodeLabel}>{node.node_name}</Text>
-                          <Text style={D.nodeSub}>{node.executor_name || 'Unassigned'}</Text>
-                        </View>
-                        <View style={{ borderRadius: 99, backgroundColor: (STATUS_COLORS[node.status] || '#555') + '22', paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: STATUS_COLORS[node.status] || '#555' }}>
-                          <Text style={{ color: STATUS_COLORS[node.status] || '#888', fontSize: 9, fontWeight: '800' }}>{(node.status || 'pending').toUpperCase()}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {(selectedEntry.labour_comments || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>COMMENTS</Text>
-                    {(selectedEntry.labour_comments || []).map((c, idx) => (
-                      <View key={idx} style={D.commentRow}>
-                        <Text style={D.commentUser}>{c.user_name}</Text>
-                        <Text style={D.commentText}>{c.comment}</Text>
-                        <Text style={D.commentTime}>{dayjs(c.created_at).fromNow()}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {canApprove(selectedEntry) && (
-                  <View style={{ marginTop: spacing.lg }}>
-                    <Text style={D.sectionTitle}>WORKFLOW ACTION</Text>
-                    <TextInput style={[M.input, { marginBottom: spacing.sm }]} value={workflowComment} onChangeText={setWorkflowComment} placeholder="Comment (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
-                    <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#22c55e22', borderColor: '#22c55e', flex: 1 }]} onPress={() => handleWorkflowAction('approve')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#22c55e' }]}>Approve</Text></TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#f9731622', borderColor: '#f97316', flex: 1 }]} onPress={() => handleWorkflowAction('back')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#f97316' }]}>Send Back</Text></TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#ef444422', borderColor: '#ef4444', flex: 1 }]} onPress={() => handleWorkflowAction('reject')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#ef4444' }]}>Reject</Text></TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                <View style={{ height: 20 }} />
-              </ScrollView>
-            ) : null}
-            <View style={M.mFooter}>
-              <TouchableOpacity style={[M.saveBtn, { backgroundColor: '#111', borderWidth: 1, borderColor: '#222' }]} onPress={() => setShowDetail(false)}><Text style={{ color: colors.textMuted, fontWeight: '700' }}>Close</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Edit / View Form Modal */}
+      <MonthlyReturnTemplateRN
+        key={selectedEntry?.id || ''}
+        visible={showFormView}
+        onClose={() => setShowFormView(false)}
+        initialData={selectedEntry?.form_data}
+        onSave={async (data: any) => {
+          if (!selectedEntry || !user) return;
+          try {
+            await client.put(`/labour/${selectedEntry.id}/form`, { formData: data, userId: user.id });
+            setShowFormView(false);
+            fetchEntries();
+            Alert.alert('Success', 'Labour log updated successfully.');
+          } catch (e: any) {
+            Alert.alert('Error', e?.response?.data?.error || 'Failed to update');
+          }
+        }}
+      />
 
       {/* History Modal */}
-      <Modal visible={showHistory} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Version History</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            {historyLoading ? <ActivityIndicator color={ACCENT} style={{ margin: 40 }} /> : (
-              <FlatList data={historyList} keyExtractor={(_, i) => String(i)} style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}
-                renderItem={({ item }) => (
-                  <View style={H.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={H.time}>{dayjs(item.created_at || item.savedAt).format('DD MMM YYYY HH:mm')}</Text>
-                      <Text style={H.sub}>{item.status || ''}</Text>
-                    </View>
-                    <TouchableOpacity style={H.restoreBtn} onPress={() => restoreHistory(item.id)}>
-                      <Icon name="restore" size={14} color={ACCENT} />
-                      <Text style={[H.restoreTxt, { color: ACCENT }]}>Restore</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 40 }}>No history available</Text>}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
+      <HistoryModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        history={historyList}
+        onRestore={(h) => restoreHistory(h.id)}
+      />
 
       {/* Rename Modal */}
       <Modal visible={showRename} animationType="fade" transparent>
@@ -570,7 +585,7 @@ const S = StyleSheet.create({
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   listContent: { padding: 20, paddingBottom: 80 },
-  pageHeader: { marginBottom: 20 },
+  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
@@ -581,6 +596,8 @@ const S = StyleSheet.create({
   tabActive: { backgroundColor: '#2a1a3d', borderColor: ACCENT },
   tabText: { color: '#666', fontSize: 11, fontWeight: '700' },
   tabTextActive: { color: ACCENT },
+  tabLabel: { color: '#555', fontSize: 9, fontWeight: '600', letterSpacing: 0.2 },
+  tabLabelActive: { color: ACCENT },
   shownText: { color: '#555', fontSize: 12, marginBottom: 14 },
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: colors.textMuted, fontSize: 15, fontWeight: '700', marginTop: 12 },

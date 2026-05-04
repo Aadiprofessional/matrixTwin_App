@@ -15,13 +15,16 @@ import {
   getCleansingHistory, restoreCleansingFromHistory,
   CleansingEntry,
 } from '../../api/cleansing';
-import { client } from '../../api/client';
+import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 import { getProjectMembers, ProjectMember, TeamMember } from '../../api/team';
 import ProcessFlowBuilder from '../../components/forms/ProcessFlowBuilder';
 import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
+import { FormEntryCard, CardMetrics } from '../../components/ui/FormEntryCard';
+import ModuleDetailModal from '../../components/ui/ModuleDetailModal';
+import HistoryModal from '../../components/ui/HistoryModal';
 
 dayjs.extend(relativeTime);
 
@@ -147,6 +150,18 @@ export default function CleansingScreen() {
   const [showRename, setShowRename] = useState(false);
   const [renameEntry, setRenameEntry] = useState<FullEntry | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showFormView, setShowFormView] = useState(false);
+  // Expiry per-card state
+  const [expiryDrafts, setExpiryDrafts] = useState<Record<string, string>>({});
+  const [savingExpiry, setSavingExpiry] = useState<Record<string, boolean>>({});
+  const [updatingExpiryStatus, setUpdatingExpiryStatus] = useState<Record<string, boolean>>({});
+  // Edit form draft state
+  const [editArea, setEditArea] = useState('');
+  const [editCleaningType, setEditCleaningType] = useState('Daily');
+  const [editPerformedBy, setEditPerformedBy] = useState('');
+  const [editMaterialsUsed, setEditMaterialsUsed] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -288,6 +303,26 @@ export default function CleansingScreen() {
     ]);
   };
 
+  const handleCardSetExpiry = async (entry: FullEntry, draft: string) => {
+    if (!user?.id || !isAdmin || !draft) return;
+    try {
+      setSavingExpiry(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/cleansing/${entry.id}/expiry`, { expiresAt: new Date(draft).toISOString() });
+      fetchEntries();
+    } catch { Alert.alert('Error', 'Failed to set expiry'); }
+    setSavingExpiry(prev => ({ ...prev, [entry.id]: false }));
+  };
+
+  const handleCardSetExpiryStatus = async (entry: FullEntry, status: 'active' | 'expired') => {
+    if (!user?.id || !isAdmin) return;
+    try {
+      setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/cleansing/${entry.id}/expiry-status`, { status });
+      fetchEntries();
+    } catch { Alert.alert('Error', 'Failed to update status'); }
+    setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: false }));
+  };
+
   const canApprove = (e: FullEntry) => {
     if (!user) return false;
     if (e.status === 'completed' || e.status === 'permanently_rejected') return false;
@@ -364,7 +399,7 @@ export default function CleansingScreen() {
           { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
           { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
           { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
-        ] as const).map(({ key, icon, count }) => {
+        ] as const).map(({ key, icon, count, label }) => {
           const active = filterStatus === key;
           return (
             <TouchableOpacity
@@ -374,6 +409,7 @@ export default function CleansingScreen() {
             >
               <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
               <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -387,13 +423,47 @@ export default function CleansingScreen() {
           ListHeaderComponent={() => <View style={{ height: 0 }} />}
           contentContainerStyle={S.listContent}
           renderItem={({ item }) => (
-            <CleansingCard
-              item={item}
+            <FormEntryCard
+              date={dayjs(item.date).format('YYYY-MM-DD')}
+              title={(item as any).name || item.area || item.form_number || `Cleansing-${item.id.slice(0, 8)}`}
+              status={item.status}
+              accentColor={ACCENT}
+              expiresAt={item.expires_at}
+              metaItems={[
+                { icon: 'account-outline', text: item.performed_by || '—' },
+                { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.slice(0, 8)}` },
+              ]}
+              isAdmin={isAdmin}
+              expiryDraft={expiryDrafts[item.id] || ''}
+              onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
+              onSetExpiry={() => handleCardSetExpiry(item, expiryDrafts[item.id] || '')}
+              savingExpiry={!!savingExpiry[item.id]}
+              onSetExpired={() => handleCardSetExpiryStatus(item, 'expired')}
+              updatingExpiry={!!updatingExpiryStatus[item.id]}
+              onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
               onViewDetails={() => openDetail(item)}
               onHistory={() => openHistory(item)}
-              onDelete={() => handleDelete(item)}
+              showEdit={isAdmin || item.status === 'rejected'}
+              onEdit={() => {
+                setSelectedEntry(item);
+                setEditArea(item.area || '');
+                setEditCleaningType(item.cleaning_type || 'Daily');
+                setEditPerformedBy(item.performed_by || '');
+                setEditMaterialsUsed(item.materials_used || '');
+                setEditNotes(item.notes || '');
+                setShowFormView(true);
+              }}
               onRename={() => openRename(item)}
-            />
+              onDelete={() => handleDelete(item)}
+            >
+              <CardMetrics
+                items={[
+                  { label: 'Type', value: item.cleaning_type || 'N/A', color: ACCENT },
+                  { label: 'Area', value: item.area || 'N/A' },
+                  { label: 'By', value: item.performed_by ? item.performed_by.split(' ')[0] : 'N/A' },
+                ]}
+              />
+            </FormEntryCard>
           )}
           ListEmptyComponent={
             <View style={S.empty}>
@@ -405,105 +475,111 @@ export default function CleansingScreen() {
       )}
 
       {/* Detail Modal */}
-      <Modal visible={showDetail && !!selectedEntry} animationType="slide" transparent>
+      <ModuleDetailModal
+        visible={showDetail && !!selectedEntry}
+        onClose={() => setShowDetail(false)}
+        title={(selectedEntry as any)?.name || selectedEntry?.area || selectedEntry?.form_number || 'Cleansing Details'}
+        accentColor={ACCENT}
+        loading={loadingDetail}
+        status={selectedEntry?.status}
+        metrics={selectedEntry ? [
+          { label: 'Type', value: selectedEntry.cleaning_type || 'N/A', color: ACCENT },
+          { label: 'Area', value: selectedEntry.area || 'N/A' },
+          { label: 'By', value: selectedEntry.performed_by?.split(' ')[0] || 'N/A' },
+        ] : []}
+        fields={selectedEntry ? [
+          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY') },
+          { label: 'Performed By', value: selectedEntry.performed_by },
+          { label: 'Materials Used', value: selectedEntry.materials_used },
+          { label: 'Notes', value: selectedEntry.notes },
+        ] : []}
+        workflowNodes={(selectedEntry?.cleansing_workflow_nodes || []) as any}
+        currentNodeIndex={selectedEntry?.current_node_index || 0}
+        comments={(selectedEntry?.cleansing_comments || []) as any}
+        canApprove={selectedEntry ? canApprove(selectedEntry) : false}
+        actionLoading={actionLoading}
+        workflowComment={workflowComment}
+        onWorkflowCommentChange={setWorkflowComment}
+        onApprove={() => handleWorkflowAction('approve')}
+        onSendBack={() => handleWorkflowAction('back')}
+        onReject={() => handleWorkflowAction('reject')}
+        canEditForm={isAdmin || selectedEntry?.status === 'rejected'}
+        onEditForm={() => {
+          if (selectedEntry) {
+            setEditArea(selectedEntry.area || '');
+            setEditCleaningType(selectedEntry.cleaning_type || 'Daily');
+            setEditPerformedBy(selectedEntry.performed_by || '');
+            setEditMaterialsUsed(selectedEntry.materials_used || '');
+            setEditNotes(selectedEntry.notes || '');
+          }
+          setShowDetail(false);
+          setShowFormView(true);
+        }}
+        onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
+        onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+      />
+
+      {/* Edit Form Modal */}
+      <Modal visible={showFormView} animationType="slide" transparent>
         <View style={M.overlay}>
           <View style={M.sheet}>
             <View style={M.mHeader}>
-              <Text style={M.mTitle}>Cleansing Details</Text>
-              <TouchableOpacity onPress={() => setShowDetail(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
+              <Text style={M.mTitle}>Edit Cleansing Entry</Text>
+              <TouchableOpacity onPress={() => setShowFormView(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
             </View>
-            {loadingDetail ? <ActivityIndicator color={ACCENT} style={{ margin: 40 }} /> : selectedEntry ? (
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}>
-                <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md }}>
-                  <MetricBox label="Type" value={selectedEntry.cleaning_type || 'N/A'} color={ACCENT} />
-                  <MetricBox label="Area" value={selectedEntry.area || 'N/A'} />
-                  <MetricBox label="By" value={selectedEntry.performed_by?.split(' ')[0] || 'N/A'} />
-                </View>
-                <DField label="Date" value={dayjs(selectedEntry.date).format('DD MMM YYYY')} />
-                <DField label="Performed By" value={selectedEntry.performed_by} />
-                <DField label="Materials Used" value={selectedEntry.materials_used} />
-                <DField label="Notes" value={selectedEntry.notes} />
-
-                {(selectedEntry.cleansing_workflow_nodes || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>WORKFLOW</Text>
-                    {[...(selectedEntry.cleansing_workflow_nodes || [])].sort((a,b)=>a.node_order-b.node_order).map((node, idx) => (
-                      <View key={node.id} style={D.nodeRow}>
-                        <View style={[D.nodeDot, { backgroundColor: idx < (selectedEntry.current_node_index ?? 0) ? '#22c55e' : idx === (selectedEntry.current_node_index ?? 0) ? ACCENT : '#333' }]} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={D.nodeLabel}>{node.node_name}</Text>
-                          <Text style={D.nodeSub}>{node.executor_name || 'Unassigned'}</Text>
-                        </View>
-                        <View style={{ borderRadius: 99, backgroundColor: (STATUS_COLORS[node.status] || '#555') + '22', paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: STATUS_COLORS[node.status] || '#555' }}>
-                          <Text style={{ color: STATUS_COLORS[node.status] || '#888', fontSize: 9, fontWeight: '800' }}>{(node.status || 'pending').toUpperCase()}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {(selectedEntry.cleansing_comments || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>COMMENTS</Text>
-                    {(selectedEntry.cleansing_comments || []).map((c, idx) => (
-                      <View key={idx} style={D.commentRow}>
-                        <Text style={D.commentUser}>{c.user_name}</Text>
-                        <Text style={D.commentText}>{c.comment}</Text>
-                        <Text style={D.commentTime}>{dayjs(c.created_at).fromNow()}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {canApprove(selectedEntry) && (
-                  <View style={{ marginTop: spacing.lg }}>
-                    <Text style={D.sectionTitle}>WORKFLOW ACTION</Text>
-                    <TextInput style={[M.input, { marginBottom: spacing.sm }]} value={workflowComment} onChangeText={setWorkflowComment} placeholder="Comment (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
-                    <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#22c55e22', borderColor: '#22c55e', flex: 1 }]} onPress={() => handleWorkflowAction('approve')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#22c55e' }]}>Approve</Text></TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#f9731622', borderColor: '#f97316', flex: 1 }]} onPress={() => handleWorkflowAction('back')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#f97316' }]}>Send Back</Text></TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#ef444422', borderColor: '#ef4444', flex: 1 }]} onPress={() => handleWorkflowAction('reject')} disabled={actionLoading}><Text style={[D.wBtnText, { color: '#ef4444' }]}>Reject</Text></TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                <View style={{ height: 20 }} />
-              </ScrollView>
-            ) : null}
+            <ScrollView style={{ flex: 1, padding: spacing.md }}>
+              <Text style={M.label}>Area *</Text>
+              <TextInput style={M.input} value={editArea} onChangeText={setEditArea} placeholder="e.g. Level 3 Corridor" placeholderTextColor={colors.textMuted} />
+              <Text style={M.label}>Cleaning Type</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm }}>
+                {CLEANING_TYPES.map(t => (
+                  <TouchableOpacity key={t} style={{ borderRadius: 99, borderWidth: 1, borderColor: editCleaningType === t ? ACCENT : '#333', backgroundColor: editCleaningType === t ? ACCENT + '22' : 'transparent', paddingHorizontal: spacing.md, paddingVertical: 6 }} onPress={() => setEditCleaningType(t)}>
+                    <Text style={{ color: editCleaningType === t ? ACCENT : '#555', fontSize: 12, fontWeight: '700' }}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={M.label}>Performed By</Text>
+              <TextInput style={M.input} value={editPerformedBy} onChangeText={setEditPerformedBy} placeholder="Name" placeholderTextColor={colors.textMuted} />
+              <Text style={M.label}>Materials Used</Text>
+              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={editMaterialsUsed} onChangeText={setEditMaterialsUsed} placeholder="List materials..." placeholderTextColor={colors.textMuted} multiline />
+              <Text style={M.label}>Notes</Text>
+              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={editNotes} onChangeText={setEditNotes} placeholder="Additional notes..." placeholderTextColor={colors.textMuted} multiline />
+              <View style={{ height: 20 }} />
+            </ScrollView>
             <View style={M.mFooter}>
-              <TouchableOpacity style={[M.cancelBtn]} onPress={() => setShowDetail(false)}><Text style={M.cancelBtnText}>Close</Text></TouchableOpacity>
+              <TouchableOpacity style={M.cancelBtn} onPress={() => setShowFormView(false)}><Text style={M.cancelBtnText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity
+                style={[M.saveBtn, { backgroundColor: ACCENT }]}
+                onPress={async () => {
+                  if (!selectedEntry || !user) return;
+                  if (!editArea.trim()) { Alert.alert('Validation', 'Area is required'); return; }
+                  setEditSaving(true);
+                  try {
+                    await client.put(`/cleansing/${selectedEntry.id}`, { area: editArea, cleaning_type: editCleaningType, performed_by: editPerformedBy, materials_used: editMaterialsUsed, notes: editNotes, userId: user.id });
+                    setShowFormView(false);
+                    fetchEntries();
+                    Alert.alert('Success', 'Cleansing entry updated.');
+                  } catch (e: any) {
+                    Alert.alert('Error', e?.response?.data?.error || 'Failed to update');
+                  }
+                  setEditSaving(false);
+                }}
+                disabled={editSaving}
+              >
+                {editSaving ? <ActivityIndicator color="#fff" size="small" /> : <><Icon name="check" size={16} color="#fff" /><Text style={M.saveBtnText}>Save Changes</Text></>}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
       {/* History Modal */}
-      <Modal visible={showHistory} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Version History</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            {historyLoading ? <ActivityIndicator color={ACCENT} style={{ margin: 40 }} /> : (
-              <FlatList data={historyList} keyExtractor={(_, i) => String(i)} style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}
-                renderItem={({ item }) => (
-                  <View style={H.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={H.time}>{dayjs(item.created_at || item.savedAt).format('DD MMM YYYY HH:mm')}</Text>
-                      <Text style={H.sub}>{item.status || ''}</Text>
-                    </View>
-                    <TouchableOpacity style={H.restoreBtn} onPress={() => restoreHistory(item.id)}>
-                      <Icon name="restore" size={14} color={ACCENT} />
-                      <Text style={[H.restoreTxt, { color: ACCENT }]}>Restore</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 40 }}>No history available</Text>}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
+      <HistoryModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        history={historyList}
+        onRestore={(h) => restoreHistory(h.id)}
+      />
 
       {/* Rename Modal */}
       <Modal visible={showRename} animationType="fade" transparent>
@@ -606,7 +682,7 @@ const S = StyleSheet.create({
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   listContent: { padding: 20, paddingBottom: 80 },
-  pageHeader: { marginBottom: 20 },
+  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
@@ -617,6 +693,8 @@ const S = StyleSheet.create({
   tabActive: { backgroundColor: '#0d2a15', borderColor: ACCENT },
   tabText: { color: '#666', fontSize: 11, fontWeight: '700' },
   tabTextActive: { color: ACCENT },
+  tabLabel: { color: '#555', fontSize: 9, fontWeight: '600', letterSpacing: 0.2 },
+  tabLabelActive: { color: ACCENT },
   shownText: { color: '#555', fontSize: 12, marginBottom: 14 },
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: colors.textMuted, fontSize: 15, fontWeight: '700', marginTop: 12 },

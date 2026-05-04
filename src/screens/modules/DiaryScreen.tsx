@@ -11,7 +11,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import {
   getDiaryEntries, getDiaryEntryById, createDiaryEntry, deleteDiaryEntry,
-  updateDiaryWorkflowAction, SiteDiaryFormData, SaveProcessNode,
+  updateDiaryWorkflowAction, updateDiaryFormData, SiteDiaryFormData, SaveProcessNode,
   getDiaryHistory, restoreDiaryFromHistory, setDiaryExpiry, setDiaryExpiryStatus,
   renameDiary, sendNodeReminder
 } from '../../api/diary';
@@ -23,6 +23,7 @@ import { getProjectMembers, ProjectMember, TeamMember } from '../../api/team';
 import { generateReport } from '../../api/analytics';
 import { API_BASE_URL } from '../../api/client';
 import SiteDiaryFormTemplate from '../../components/forms/SiteDiaryFormTemplate';
+import { FormEntryCard, CardContentBlock, CardGrid } from '../../components/ui/FormEntryCard';
 import ProcessFlowBuilder, { ProcessNode as PFNode } from '../../components/forms/ProcessFlowBuilder';
 import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
 import HistoryModal from '../../components/ui/HistoryModal';
@@ -127,6 +128,7 @@ export default function DiaryScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [projectMembers, setProjectMembers] = useState<TeamMember[]>([]);
   const isSmallScreen = useMemo(() => Dimensions.get('window').width < 390, []);
+  const [showFormView, setShowFormView] = useState(false);
 
   useEffect(() => {
     const loadMembers = async () => {
@@ -412,6 +414,43 @@ export default function DiaryScreen() {
     return node?.executor_id === user.id;
   };
 
+  const canUserEditEntry = (e: FullEntry) => {
+    if (!user?.id) return false;
+    if (e.status === 'permanently_rejected') return false;
+    if (user.role === 'admin' && (e.status === 'pending' || e.status === 'rejected')) return true;
+    const currentNode = e.diary_workflow_nodes?.find(n => n.node_order === e.current_node_index);
+    if (currentNode && currentNode.executor_id === user.id && e.status === 'rejected') return true;
+    return false;
+  };
+
+  const canUserUpdateForm = (e: FullEntry) => {
+    if (!user?.id) return false;
+    if (e.status === 'permanently_rejected') return false;
+    if (user.role === 'admin' && e.created_by === user.id) return true;
+    const currentNode = e.diary_workflow_nodes?.find(n => n.node_order === e.current_node_index);
+    if (currentNode && currentNode.executor_id === user.id) {
+      return (currentNode as any).can_re_edit !== false;
+    }
+    const isAssigned = (e as any).diary_assignments?.some(
+      (a: any) => a.user_id === user.id && a.node_id === (currentNode as any)?.node_id
+    );
+    if (isAssigned && e.status === 'rejected') return true;
+    return !!isAssigned;
+  };
+
+  const handleFormUpdate = async (formData: SiteDiaryFormData) => {
+    if (!selectedEntry || !user?.id) return;
+    try {
+      await updateDiaryFormData(selectedEntry.id, { formData, action: 'update', userId: user.id });
+      setShowFormView(false);
+      await fetchEntries();
+      Alert.alert('Success', 'Form updated successfully!');
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Failed to update form';
+      Alert.alert('Error', msg);
+    }
+  };
+
   const reportData = useMemo(() => {
     const contributorMap = filtered.reduce<Record<string, number>>((acc, entry) => {
       const key = entry.author || 'Unknown';
@@ -540,7 +579,7 @@ export default function DiaryScreen() {
           { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
           { key: 'rejected',  icon: 'close-circle-outline', count: rejected,  label: 'Rejected' },
           { key: 'permanent', icon: 'cancel',               count: permanent, label: 'Perm.' },
-        ] as const).map(({ key, icon, count }) => {
+        ] as const).map(({ key, icon, count, label }) => {
           const active = filterStatus === key;
           return (
             <TouchableOpacity
@@ -550,6 +589,7 @@ export default function DiaryScreen() {
             >
               <Icon name={icon} size={15} color={active ? '#b0c985' : '#666'} />
               <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -595,63 +635,54 @@ export default function DiaryScreen() {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const expired = isEntryExpired(item);
-          const daysExpired = expired ? Math.floor((Date.now() - getEntryExpiryDate(item).getTime()) / (1000*60*60*24)) : 0;
+          const canEdit = canUserUpdateForm(item) || canUserEditEntry(item);
           return (
-            <View style={S.diaryCard}>
-              <View style={S.cardHeader}>
-                <Text style={S.cardDate}>{dayjs(item.date).format('YYYY-MM-DD')}</Text>
-                {expired && <View style={S.expiredBadge}><Text style={S.expiredText}>Expired</Text></View>}
-              </View>
-              <Text style={S.cardTitle}>{item.name || `Diary - ${projectName} - ${dayjs(item.date).format('DD MMM')}`}</Text>
-              
-              <View style={S.authorRow}>
-                <View style={S.avatar}><Text style={S.avatarText}>{item.author.charAt(0)}</Text></View>
-                <Text style={S.authorName}>{item.author}</Text>
-              </View>
-
-              <View style={S.infoBlock}>
-                <Text style={S.infoLabel}>Form No:</Text>
-                <Text style={S.infoValue}>{item.form_number || item.id.substring(0,8)}</Text>
-              </View>
-              <View style={S.infoBlock}>
-                <Text style={S.infoValueMuted}>
-                  {item.weather || 'Not specified'},
-                </Text>
-                {expired && <Text style={S.infoValueMuted}>Expired {daysExpired} days ago</Text>}
-              </View>
-
-              <View style={S.sectionsBlock}>
-                <Text style={S.sectionLabel}>Work Completed</Text>
-                <Text style={S.sectionContent}>{item.work_completed || 'None'}</Text>
-                
-                <Text style={S.sectionLabel}>Incidents</Text>
-                <Text style={S.sectionContent}>{item.incidents_reported || 'None'}</Text>
-                
-                <Text style={S.sectionLabel}>Materials</Text>
-                <Text style={S.sectionContent}>{item.materials_delivered || 'None'}</Text>
-                
-                <Text style={S.sectionLabel}>Additional Notes</Text>
-                <Text style={S.sectionContent}>{item.notes || 'None'}</Text>
-              </View>
-
-              <Text style={S.sectionLabel}>Activation</Text>
-              <View style={S.activationWrap}>
-                <TouchableOpacity style={S.activationBtn} onPress={() => handleSetExpiryStatus(item, true)}>
-                  <Text style={S.activationBtnText}>Set Active</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={S.cardActions}>
-                <TouchableOpacity style={S.cardActionBtn} onPress={() => openDetail(item)}><Text style={S.actionLink}>View Details</Text></TouchableOpacity>
-                <TouchableOpacity style={S.cardActionBtn} onPress={() => fetchHistory(item.id)}><Text style={S.actionLink}>History</Text></TouchableOpacity>
-                {user?.role === 'admin' && (
-                  <>
-                    <TouchableOpacity style={S.cardActionBtn} onPress={() => handleRenameDiary(item)}><Text style={S.actionLink}>Rename</Text></TouchableOpacity>
-                    <TouchableOpacity style={[S.cardActionBtn, S.cardActionDelete]} onPress={() => handleDelete(item)}><Text style={[S.actionLink, { color: '#ff7373' }]}>Delete</Text></TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
+            <FormEntryCard
+              date={dayjs(item.date).format('YYYY-MM-DD')}
+              title={item.name || `Diary - ${projectName} - ${dayjs(item.date).format('DD MMM')}`}
+              status={item.status}
+              accentColor={ACCENT}
+              isExpired={expired}
+              expiresAt={item.expires_at || item.expiresAt}
+              metaItems={[
+                { icon: 'account-outline', text: item.author },
+                { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.substring(0, 8)}` },
+                { icon: 'weather-partly-cloudy', text: [item.weather, item.temperature].filter(Boolean).join(', ') || 'Not specified' },
+              ]}
+              isAdmin={user?.role === 'admin'}
+              expiryDraft={expiryDrafts[item.id] || ''}
+              onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
+              onSetExpiry={async () => {
+                const draft = expiryDrafts[item.id];
+                if (!draft || !user?.id) return;
+                try {
+                  setSavingExpiry(prev => ({ ...prev, [item.id]: true }));
+                  await setDiaryExpiry(item.id, user.id, new Date(draft).toISOString());
+                  fetchEntries();
+                } catch { Alert.alert('Error', 'Failed to set expiry'); }
+                setSavingExpiry(prev => ({ ...prev, [item.id]: false }));
+              }}
+              savingExpiry={!!savingExpiry[item.id]}
+              onSetExpired={() => handleSetExpiryStatus(item, false)}
+              updatingExpiry={!!updatingExpiryStatus[item.id]}
+              onSetActive={() => handleSetExpiryStatus(item, true)}
+              onViewDetails={() => openDetail(item)}
+              onHistory={() => fetchHistory(item.id)}
+              showEdit={canEdit}
+              editLabel={canEdit ? 'Edit Form' : 'View Form'}
+              onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
+              onRename={() => handleRenameDiary(item)}
+              onDelete={() => handleDelete(item)}
+            >
+              <CardContentBlock label="Work Completed" value={item.work_completed} />
+              <CardGrid
+                items={[
+                  { label: 'Incidents', value: item.incidents_reported },
+                  { label: 'Materials', value: item.materials_delivered },
+                ]}
+              />
+              <CardContentBlock label="Additional Notes" value={item.notes} />
+            </FormEntryCard>
           );
         }}
       />
@@ -728,11 +759,49 @@ export default function DiaryScreen() {
                 
                 <View style={S.bottomActionRow}>
                   <TouchableOpacity style={[S.bottomBtn, S.bottomBtnDanger]}><Text style={[S.bottomBtnText, { color: '#ff7373' }]}>Delete</Text></TouchableOpacity>
+                  {selectedEntry && (canUserUpdateForm(selectedEntry) || canUserEditEntry(selectedEntry)) && (
+                    <TouchableOpacity
+                      style={[S.bottomBtn, S.primaryBottomBtn]}
+                      onPress={() => { setShowDetail(false); setShowFormView(true); }}
+                    >
+                      <Text style={S.primaryBottomBtnText}>
+                        {canUserUpdateForm(selectedEntry) || canUserEditEntry(selectedEntry) ? 'Edit Form' : 'View Form'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {selectedEntry && !canUserUpdateForm(selectedEntry) && !canUserEditEntry(selectedEntry) && (
+                    <TouchableOpacity
+                      style={S.bottomBtn}
+                      onPress={() => { setShowDetail(false); setShowFormView(true); }}
+                    >
+                      <Text style={S.bottomBtnText}>View Form</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={S.bottomBtn} onPress={() => setShowDetail(false)}><Text style={S.bottomBtnText}>Close</Text></TouchableOpacity>
                 </View>
               </ScrollView>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* Edit / View Form Modal */}
+      <Modal visible={showFormView} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+          <View style={[S.sheetHeader, { paddingTop: 50, paddingHorizontal: 20 }]}>
+            <Text style={S.sheetTitle}>
+              {selectedEntry && (canUserUpdateForm(selectedEntry) || canUserEditEntry(selectedEntry)) ? 'Edit Diary Entry' : 'View Diary Entry'}
+            </Text>
+            <TouchableOpacity onPress={() => setShowFormView(false)}><Icon name="close" size={24} color="#fff" /></TouchableOpacity>
+          </View>
+          {selectedEntry && (
+            <SiteDiaryFormTemplate
+              onClose={() => setShowFormView(false)}
+              onSave={handleFormUpdate}
+              initialData={selectedEntry.form_data}
+              readOnly={!canUserUpdateForm(selectedEntry) && !canUserEditEntry(selectedEntry)}
+            />
+          )}
         </View>
       </Modal>
 
@@ -976,6 +1045,8 @@ const S = StyleSheet.create({
   tabActive: { backgroundColor: '#1a2a10', borderColor: '#b0c985' },
   tabText: { color: '#666', fontSize: 11, fontWeight: '700' },
   tabTextActive: { color: '#b0c985' },
+  tabLabel: { color: '#555', fontSize: 9, fontWeight: '600', letterSpacing: 0.2 },
+  tabLabelActive: { color: '#b0c985' },
   shownText: { color: '#555', fontSize: 12, marginBottom: 14 },
 
   diaryCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#222', borderRadius: 12, padding: 20, marginBottom: 16 },

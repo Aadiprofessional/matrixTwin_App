@@ -17,11 +17,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import dayjs from 'dayjs';
 import { getProjects, createProject, deleteProject, Project } from '../../api/projects';
 import { getCompany } from '../../api/company';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import NotificationsModal from '../../components/ui/NotificationsModal';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 
@@ -98,6 +101,8 @@ function ProjectCard({ project, index, onPress }: ProjectCardProps) {
 export default function ProjectsScreen() {
   const navigation = useNavigation<Nav>();
   const { user, logout } = useAuthStore();
+  const { unreadCount, startPolling, stopPolling } = useNotificationStore();
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +145,9 @@ export default function ProjectsScreen() {
   useEffect(() => {
     fetchProjects();
     fetchCompany();
+    // Start polling notifications (30s interval, same as website)
+    startPolling();
+    return () => stopPolling();
   }, []);
 
   const onRefresh = useCallback(() => {
@@ -189,6 +197,9 @@ export default function ProjectsScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
+      {/* Notifications Modal */}
+      <NotificationsModal visible={showNotifications} onClose={() => setShowNotifications(false)} />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -207,6 +218,19 @@ export default function ProjectsScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
+            {/* Notification Bell */}
+            <TouchableOpacity
+              style={styles.bellBtn}
+              onPress={() => setShowNotifications(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon name="bell-outline" size={22} color={colors.textSecondary} />
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
             {user?.role === 'admin' && (
               <TouchableOpacity style={styles.newBtn} onPress={() => setShowNewProject(true)}>
                 <Text style={styles.newBtnText}>+ NEW</Text>
@@ -335,7 +359,31 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
   headerAccent: { color: colors.primary },
   headerSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bellBtn: {
+    position: 'relative',
+    padding: 6,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
+  bellBadgeText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 13,
+  },
   newBtn: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xxs,

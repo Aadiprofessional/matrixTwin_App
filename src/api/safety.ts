@@ -37,6 +37,8 @@ export interface SafetyEntry {
   updated_at?: string;
   expires_at?: string;
   active?: boolean;
+  form_data?: any;
+  name?: string;
 }
 
 export interface ProcessNodeUser {

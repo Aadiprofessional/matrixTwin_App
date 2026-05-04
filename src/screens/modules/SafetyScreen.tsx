@@ -10,7 +10,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import {
-  getSafetyEntries, createSafetyEntry, deleteSafetyEntry,
+  getSafetyEntries, getSafetyEntryById, createSafetyEntry, deleteSafetyEntry,
   getSafetyHistory, restoreSafetyFromHistory, updateSafetyEntry,
   updateSafetyWorkflowAction, SafetyEntry,
 } from '../../api/safety';
@@ -18,6 +18,9 @@ import { getProjectMembers } from '../../api/team';
 import SafetyInspectionFormRN, { SafetyFormData } from '../../components/forms/SafetyInspectionFormRN';
 import ProcessFlowBuilder, { ProcessNode } from '../../components/forms/ProcessFlowBuilder';
 import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
+import { FormEntryCard, CardMetrics } from '../../components/ui/FormEntryCard';
+import ModuleDetailModal from '../../components/ui/ModuleDetailModal';
+import HistoryModal from '../../components/ui/HistoryModal';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
@@ -154,6 +157,12 @@ export default function SafetyScreen() {
   const [entries, setEntries] = useState<SafetyEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all'|'pending'|'completed'|'rejected'>('all');
+
+  // Expiry per-card state
+  const [expiryDrafts, setExpiryDrafts] = useState<Record<string, string>>({});
+  const [savingExpiry, setSavingExpiry] = useState<Record<string, boolean>>({});
+  const [updatingExpiryStatus, setUpdatingExpiryStatus] = useState<Record<string, boolean>>({});
 
   // Creation flow
   const [showForm, setShowForm] = useState(false);
@@ -173,8 +182,10 @@ export default function SafetyScreen() {
   // Detail modal
   const [selectedEntry, setSelectedEntry] = useState<SafetyEntry | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [workflowComment, setWorkflowComment] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [showFormView, setShowFormView] = useState(false);
 
   // History
   const [showHistory, setShowHistory] = useState(false);
@@ -195,6 +206,17 @@ export default function SafetyScreen() {
   // Status
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusEntry, setStatusEntry] = useState<SafetyEntry | null>(null);
+
+  const openDetail = async (entry: SafetyEntry) => {
+    setSelectedEntry(entry);
+    setShowDetail(true);
+    setLoadingDetail(true);
+    try {
+      const data = await getSafetyEntryById(entry.id);
+      setSelectedEntry(data);
+    } catch {}
+    setLoadingDetail(false);
+  };
 
   const loadEntries = useCallback(async () => {
     if (!user) return;
@@ -338,6 +360,26 @@ export default function SafetyScreen() {
     ]);
   };
 
+  const handleCardSetExpiry = async (entry: SafetyEntry, draft: string) => {
+    if (!user?.id || !isAdmin || !draft) return;
+    try {
+      setSavingExpiry(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/safety/${entry.id}/expiry`, { expiresAt: new Date(draft).toISOString() });
+      loadEntries();
+    } catch { Alert.alert('Error', 'Failed to set expiry'); }
+    setSavingExpiry(prev => ({ ...prev, [entry.id]: false }));
+  };
+
+  const handleCardSetExpiryStatus = async (entry: SafetyEntry, status: 'active' | 'expired') => {
+    if (!user?.id || !isAdmin) return;
+    try {
+      setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: true }));
+      await client.patch(`/safety/${entry.id}/expiry-status`, { status });
+      loadEntries();
+    } catch { Alert.alert('Error', 'Failed to update status'); }
+    setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: false }));
+  };
+
   const canApprove = () => {
     if (!selectedEntry || !user) return false;
     const nodes = selectedEntry.safety_workflow_nodes || [];
@@ -345,9 +387,13 @@ export default function SafetyScreen() {
     return node && (node.executor_id === user.id || isAdmin);
   };
 
-  const filtered = entries.filter(e =>
-    !search || ((e as any).name || e.form_number || e.inspector || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = entries.filter(e => {
+    if (filterStatus === 'pending' && e.status !== 'pending') return false;
+    if (filterStatus === 'completed' && e.status !== 'approved' && e.status !== 'completed') return false;
+    if (filterStatus === 'rejected' && e.status !== 'rejected') return false;
+    if (search && !((e as any).name || e.form_number || e.inspector || '').toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <SafeAreaView edges={['top']} style={S.container}>
@@ -403,15 +449,17 @@ export default function SafetyScreen() {
           { key: 'pending',   icon: 'clock-outline',        count: entries.filter(e => e.status === 'pending').length, label: 'Pending' },
           { key: 'completed', icon: 'check-circle-outline', count: entries.filter(e => e.status === 'approved' || e.status === 'completed').length, label: 'Done' },
           { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected').length, label: 'Rejected' },
-        ] as const).map(({ key, icon, count }) => {
-          const active = false;
+        ] as const).map(({ key, icon, count, label }) => {
+          const active = filterStatus === key;
           return (
             <TouchableOpacity
               key={key}
+              onPress={() => setFilterStatus(key)}
               style={[S.tab, active && S.tabActive]}
             >
               <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
               <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -428,18 +476,46 @@ export default function SafetyScreen() {
           data={filtered}
           keyExtractor={i => i.id}
           contentContainerStyle={S.listContent}
-          renderItem={({ item }) => (
-            <SafetyCard
-              entry={item}
-              isAdmin={isAdmin}
-              onViewDetails={() => { setSelectedEntry(item); setShowDetail(true); }}
-              onHistory={() => openHistory(item)}
-              onDelete={() => handleDelete(item)}
-              onRename={() => openRename(item)}
-              onSetExpiry={() => openExpiry(item)}
-              onSetStatus={() => { setStatusEntry(item); setShowStatusModal(true); }}
-            />
-          )}
+          renderItem={({ item }) => {
+            const score = item.safety_score != null ? `${item.safety_score}%` : 'N/A';
+            const scoreColor = item.safety_score != null
+              ? (Number(item.safety_score) >= 80 ? '#22c55e' : Number(item.safety_score) >= 60 ? ACCENT : '#ef4444')
+              : undefined;
+            return (
+              <FormEntryCard
+                date={dayjs(item.created_at).format('YYYY-MM-DD')}
+                title={(item as any).name || item.form_number || `Safety-${item.id.slice(-4)}`}
+                status={item.status}
+                accentColor={ACCENT}
+                expiresAt={item.expires_at}
+                metaItems={[
+                  { icon: 'account-outline', text: item.inspector || '—' },
+                  { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.slice(0, 8)}` },
+                ]}
+                isAdmin={isAdmin}
+                expiryDraft={expiryDrafts[item.id] || ''}
+                onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
+                onSetExpiry={() => handleCardSetExpiry(item, expiryDrafts[item.id] || '')}
+                savingExpiry={!!savingExpiry[item.id]}
+                onSetExpired={() => handleCardSetExpiryStatus(item, 'expired')}
+                updatingExpiry={!!updatingExpiryStatus[item.id]}
+                onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
+                onViewDetails={() => openDetail(item)}
+                onHistory={() => openHistory(item)}
+                showEdit={isAdmin || item.status === 'rejected'}
+                onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
+                onRename={() => openRename(item)}
+                onDelete={() => handleDelete(item)}>
+                <CardMetrics
+                  items={[
+                    { label: 'Score', value: score, color: scoreColor },
+                    { label: 'Type', value: item.inspection_type || '—' },
+                    { label: 'Risk', value: (item.risk_level || '—').toUpperCase(), color: RISK_COLORS[item.risk_level] },
+                  ]}
+                />
+              </FormEntryCard>
+            );
+          }}
           ListEmptyComponent={
             <View style={S.empty}>
               <Icon name="shield-search" size={48} color="#333" />
@@ -491,120 +567,68 @@ export default function SafetyScreen() {
       <PeopleSelectorModal isOpen={showPeopleSelector} onClose={() => setShowPeopleSelector(false)} users={projectMembers} onSelect={handleAssignPerson} loading={membersLoading} title="Assign to Node" />
 
       {/* Detail Modal */}
-      <Modal visible={showDetail && !!selectedEntry} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Inspection Details</Text>
-              <TouchableOpacity onPress={() => setShowDetail(false)}>
-                <Icon name="close" size={22} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            {selectedEntry && (
-              <ScrollView style={{ flex: 1, padding: spacing.md }}>
-                <View style={[D.statusBar, { backgroundColor: (STATUS_COLORS[selectedEntry.status] || '#64748b') + '22', borderColor: STATUS_COLORS[selectedEntry.status] || '#64748b' }]}>
-                  <Text style={[D.statusText, { color: STATUS_COLORS[selectedEntry.status] || '#64748b' }]}>{(selectedEntry.status || 'pending').toUpperCase()}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md }}>
-                  <MetricBox label="Score" value={selectedEntry.safety_score != null ? `${selectedEntry.safety_score}%` : 'N/A'} color="#22c55e" />
-                  <MetricBox label="Risk" value={(selectedEntry.risk_level || '—').toUpperCase()} color={RISK_COLORS[selectedEntry.risk_level] || '#64748b'} />
-                  <MetricBox label="Type" value={selectedEntry.inspection_type || '—'} />
-                </View>
-                <DField label="Inspector" value={selectedEntry.inspector} />
-                <DField label="Location" value={selectedEntry.location} />
-                <DField label="Date" value={dayjs(selectedEntry.date || selectedEntry.created_at).format('DD MMM YYYY')} />
-                <DField label="Findings" value={selectedEntry.findings} />
-                <DField label="Corrective Actions" value={selectedEntry.corrective_actions} />
-                {selectedEntry.expires_at && <DField label="Expires At" value={dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm')} />}
+      <ModuleDetailModal
+        visible={showDetail && !!selectedEntry}
+        onClose={() => setShowDetail(false)}
+        title={(selectedEntry as any)?.name || selectedEntry?.form_number || 'Inspection Details'}
+        accentColor={ACCENT}
+        loading={loadingDetail}
+        status={selectedEntry?.status}
+        metrics={selectedEntry ? [
+          { label: 'Score', value: selectedEntry.safety_score != null ? `${selectedEntry.safety_score}%` : 'N/A', color: selectedEntry.safety_score != null ? (Number(selectedEntry.safety_score) >= 80 ? '#22c55e' : ACCENT) : undefined },
+          { label: 'Risk', value: (selectedEntry.risk_level || '—').toUpperCase(), color: RISK_COLORS[selectedEntry.risk_level] },
+          { label: 'Type', value: selectedEntry.inspection_type || '—' },
+        ] : []}
+        fields={selectedEntry ? [
+          { label: 'Inspector', value: selectedEntry.inspector },
+          { label: 'Location', value: selectedEntry.location },
+          { label: 'Date', value: dayjs(selectedEntry.date || selectedEntry.created_at).format('DD MMM YYYY') },
+          { label: 'Findings', value: selectedEntry.findings },
+          { label: 'Corrective Actions', value: selectedEntry.corrective_actions },
+          { label: 'Expires At', value: selectedEntry.expires_at ? dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm') : undefined },
+        ] : []}
+        workflowNodes={(selectedEntry?.safety_workflow_nodes || []) as any}
+        currentNodeIndex={selectedEntry?.current_node_index || 0}
+        comments={(selectedEntry?.safety_comments || []) as any}
+        canApprove={canApprove()}
+        actionLoading={actionLoading}
+        workflowComment={workflowComment}
+        onWorkflowCommentChange={setWorkflowComment}
+        onApprove={() => handleWorkflowAction('approve')}
+        onSendBack={() => handleWorkflowAction('back')}
+        onReject={() => handleWorkflowAction('reject')}
+        canEditForm={isAdmin || (selectedEntry?.status === 'rejected')}
+        onEditForm={() => { setShowDetail(false); setShowFormView(true); }}
+        onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
+        onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+      />
 
-                {(selectedEntry.safety_workflow_nodes || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>WORKFLOW</Text>
-                    {(selectedEntry.safety_workflow_nodes || []).sort((a: any, b: any) => a.node_order - b.node_order).map((node: any, idx: number) => (
-                      <View key={node.id || idx} style={D.nodeRow}>
-                        <View style={[D.nodeDot, { backgroundColor: idx < (selectedEntry.current_node_index || 0) ? '#22c55e' : idx === (selectedEntry.current_node_index || 0) ? ACCENT : '#333' }]} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={D.nodeLabel}>{node.name || node.node_name}</Text>
-                          <Text style={D.nodeSub}>{node.executor || node.executor_name || 'Unassigned'}</Text>
-                        </View>
-                        <View style={{ borderRadius: 99, backgroundColor: (STATUS_COLORS[node.status] || '#64748b') + '22', paddingHorizontal: 8, paddingVertical: 3 }}>
-                          <Text style={{ color: STATUS_COLORS[node.status] || '#64748b', fontSize: 9, fontWeight: '800' }}>{(node.status || 'pending').toUpperCase()}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {(selectedEntry.safety_comments || []).length > 0 && (
-                  <View style={{ marginTop: spacing.md }}>
-                    <Text style={D.sectionTitle}>COMMENTS</Text>
-                    {(selectedEntry.safety_comments || []).map((c: any, idx: number) => (
-                      <View key={idx} style={D.commentRow}>
-                        <Text style={D.commentUser}>{c.user_name || c.userName || 'User'}</Text>
-                        <Text style={D.commentText}>{c.comment}</Text>
-                        <Text style={D.commentTime}>{dayjs(c.created_at).fromNow()}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {canApprove() && (
-                  <View style={{ marginTop: spacing.lg }}>
-                    <Text style={D.sectionTitle}>WORKFLOW ACTION</Text>
-                    <TextInput style={[M.input, { marginBottom: spacing.sm }]} value={workflowComment} onChangeText={setWorkflowComment} placeholder="Comment (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
-                    <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#22c55e22', borderColor: '#22c55e', flex: 1 }]} onPress={() => handleWorkflowAction('approve')} disabled={actionLoading}>
-                        <Text style={[D.wBtnText, { color: '#22c55e' }]}>Approve</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#f9731622', borderColor: '#f97316', flex: 1 }]} onPress={() => handleWorkflowAction('back')} disabled={actionLoading}>
-                        <Text style={[D.wBtnText, { color: '#f97316' }]}>Send Back</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[D.wBtn, { backgroundColor: '#ef444422', borderColor: '#ef4444', flex: 1 }]} onPress={() => handleWorkflowAction('reject')} disabled={actionLoading}>
-                        <Text style={[D.wBtnText, { color: '#ef4444' }]}>Reject</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                <View style={{ height: 20 }} />
-              </ScrollView>
-            )}
-            <View style={M.mFooter}>
-              <TouchableOpacity style={[M.saveBtn, { backgroundColor: '#111', borderWidth: 1, borderColor: '#222' }]} onPress={() => setShowDetail(false)}>
-                <Text style={{ color: colors.textMuted, fontWeight: '700' }}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Edit / View Form Modal */}
+      <SafetyInspectionFormRN
+        key={selectedEntry?.id || ''}
+        visible={showFormView}
+        onClose={() => setShowFormView(false)}
+        initialData={selectedEntry?.form_data}
+        onSave={async (data: SafetyFormData) => {
+          if (!selectedEntry || !user) return;
+          try {
+            await updateSafetyEntry(selectedEntry.id, { ...data, userId: user.id } as any);
+            setShowFormView(false);
+            loadEntries();
+            Alert.alert('Success', 'Inspection updated successfully.');
+          } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Failed to update');
+          }
+        }}
+      />
 
       {/* History Modal */}
-      <Modal visible={showHistory} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Version History</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            {historyLoading ? <ActivityIndicator color={ACCENT} style={{ margin: 40 }} /> : (
-              <FlatList data={historyList} keyExtractor={(_, i) => String(i)} style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}
-                renderItem={({ item }) => (
-                  <View style={H.row}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={H.time}>{dayjs(item.created_at || item.savedAt).format('DD MMM YYYY HH:mm')}</Text>
-                      <Text style={H.sub}>{item.status || ''}</Text>
-                    </View>
-                    <TouchableOpacity style={H.restoreBtn} onPress={() => restoreHistory(item.id)}>
-                      <Icon name="restore" size={14} color={ACCENT} />
-                      <Text style={[H.restoreTxt, { color: ACCENT }]}>Restore</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 40 }}>No history available</Text>}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
+      <HistoryModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        history={historyList}
+        onRestore={(h) => restoreHistory(h.id)}
+      />
 
       {/* Rename Modal */}
       <Modal visible={showRename} animationType="fade" transparent>
@@ -681,13 +705,15 @@ const S = StyleSheet.create({
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
   searchInput: { flex: 1, color: '#fff', fontSize: 14, marginLeft: 8 },
   sortBtn: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
-  pageHeader: { marginBottom: 20 },
+  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   tabsRow: { flexDirection: 'row', gap: 6, marginBottom: 14 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#222', gap: 2 },
   tabActive: { backgroundColor: '#2a1a0d', borderColor: ACCENT },
   tabText: { color: '#666', fontSize: 11, fontWeight: '700' },
   tabTextActive: { color: ACCENT },
+  tabLabel: { color: '#555', fontSize: 9, fontWeight: '600', letterSpacing: 0.2 },
+  tabLabelActive: { color: ACCENT },
   shownText: { color: '#555', fontSize: 12, marginBottom: 14 },
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: colors.textMuted, fontSize: 15, fontWeight: '700', marginTop: 12 },

@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { BarChart, PieChart } from 'react-native-chart-kit';
+import { BarChart, PieChart } from 'react-native-gifted-charts';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { getDashboardStats, DashboardStats } from '../../api/dashboard';
 import { useAuthStore } from '../../store/authStore';
@@ -22,17 +22,6 @@ import { spacing, radius } from '../../theme/spacing';
 type RouteProps = RouteProp<AppStackParamList, 'Overview'>;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - spacing.xl * 2;
-
-const CHART_CONFIG = {
-  backgroundColor: colors.surface,
-  backgroundGradientFrom: colors.surface,
-  backgroundGradientTo: colors.surface,
-  color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
-  labelColor: () => '#9e9e9e',
-  barPercentage: 0.6,
-  propsForBackgroundLines: { stroke: 'rgba(255,255,255,0.05)' },
-  propsForLabels: { fontSize: 10 },
-};
 
 const PIE_COLORS = ['#FF5722', '#FF8A65', '#E64A19', '#FFCCBC', '#BF360C', '#FFAB91', '#FBE9E7'];
 
@@ -54,32 +43,32 @@ export default function OverviewScreen() {
   }, [projectId, user]);
 
   const types = stats ? Object.values(stats.by_type || {}) : [];
-  const labels = types.map((t: any) => (t.label || t.type || '').slice(0, 8));
 
-  const barData = {
-    labels: labels.length > 0 ? labels : ['No data'],
-    datasets: [
-      {
-        data: types.length > 0 ? types.map((t: any) => t.pending) : [0],
-        color: (opacity = 1) => `rgba(255, 196, 0, ${opacity})`,
-        strokeWidth: 1,
-      },
-      {
-        data: types.length > 0 ? types.map((t: any) => t.completed) : [0],
-        color: (opacity = 1) => `rgba(255, 87, 34, ${opacity})`,
-        strokeWidth: 1,
-      },
-    ],
-    legend: ['Pending', 'Completed'],
-  };
+  // gifted-charts BarChart: flatten pending/completed pairs per type
+  const barData = types.length > 0
+    ? types.flatMap((t: any, i: number) => [
+        {
+          value: t.pending || 0,
+          label: (t.label || t.type || '').slice(0, 6),
+          frontColor: '#FFC400',
+          spacing: 2,
+          labelWidth: 52,
+          labelTextStyle: { color: '#6d6d6d', fontSize: 9 },
+        },
+        { value: t.completed || 0, frontColor: colors.primary, spacing: 14 },
+      ])
+    : [{ value: 0, label: 'No data', frontColor: colors.primary, labelWidth: 60, labelTextStyle: { color: '#6d6d6d', fontSize: 9 } }];
 
   const pieData = types.slice(0, 7).map((t: any, i: number) => ({
-    name: (t.label || t.type || 'Unknown').slice(0, 10),
-    population: t.total || 0,
+    value: t.total || 0,
     color: PIE_COLORS[i % PIE_COLORS.length],
-    legendFontColor: '#9e9e9e',
-    legendFontSize: 11,
+    text: String(t.total || 0),
+    label: (t.label || t.type || '').slice(0, 10),
   }));
+
+  const barMaxValue = types.length > 0
+    ? Math.max(...types.flatMap((t: any) => [t.pending || 0, t.completed || 0])) + 2
+    : 10;
 
   const summaryCards = [
     {
@@ -188,15 +177,19 @@ export default function OverviewScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <BarChart
                     data={barData}
-                    width={Math.max(CHART_WIDTH, labels.length * 80)}
-                    height={220}
-                    chartConfig={CHART_CONFIG}
-                    style={styles.chart}
-                    fromZero
-                    showBarTops={false}
-                    withInnerLines
-                    yAxisLabel=""
-                    yAxisSuffix=""
+                    barWidth={18}
+                    spacing={2}
+                    roundedTop
+                    hideRules
+                    xAxisThickness={0}
+                    yAxisThickness={0}
+                    yAxisTextStyle={{ color: '#6d6d6d', fontSize: 10 }}
+                    noOfSections={4}
+                    maxValue={barMaxValue}
+                    isAnimated
+                    animationDuration={600}
+                    barBorderRadius={4}
+                    backgroundColor={colors.surface}
                   />
                 </ScrollView>
               ) : (
@@ -229,21 +222,27 @@ export default function OverviewScreen() {
                 <View style={styles.pieWrapper}>
                   <PieChart
                     data={pieData}
-                    width={CHART_WIDTH}
-                    height={200}
-                    chartConfig={CHART_CONFIG}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    paddingLeft="16"
-                    hasLegend={false}
-                    style={styles.chart}
+                    donut
+                    radius={90}
+                    innerRadius={54}
+                    showText
+                    textColor="#fff"
+                    textSize={11}
+                    isAnimated
+                    animationDuration={600}
+                    centerLabelComponent={() => (
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800' }}>{types.length}</Text>
+                        <Text style={{ color: '#6d6d6d', fontSize: 9, letterSpacing: 1 }}>TYPES</Text>
+                      </View>
+                    )}
                   />
                   <View style={styles.pieLegend}>
                     {pieData.map((item, i) => (
                       <View key={i} style={styles.pieLegendItem}>
                         <View style={[styles.pieLegendDot, { backgroundColor: item.color }]} />
-                        <Text style={styles.pieLegendLabel} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.pieLegendValue}>{item.population}</Text>
+                        <Text style={styles.pieLegendLabel} numberOfLines={1}>{item.label}</Text>
+                        <Text style={styles.pieLegendValue}>{item.value}</Text>
                       </View>
                     ))}
                   </View>

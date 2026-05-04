@@ -1008,7 +1008,7 @@ export default function AskAIScreen() {
     return (
       <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
         <View style={styles.messageStack}>
-          <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+          <View style={isUser ? styles.userBubble : [styles.bubble, styles.assistantBubble]}>
             {isUser ? (
               <Text style={styles.userText}>{item.content}</Text>
             ) : (
@@ -1550,9 +1550,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.lg,
     gap: spacing.sm,
+    width: '100%',
   },
   messageRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  messageStack: { maxWidth: '100%' },
+  messageStack: { flex: 1 },
   userRow: { justifyContent: 'flex-end' },
   assistantRow: { justifyContent: 'flex-start' },
   aiAvatar: {
@@ -1569,9 +1570,10 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '95%', borderRadius: radius.lg, padding: spacing.md },
   userBubble: {
     backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
+    borderRadius: radius.lg,
     maxWidth: '80%',
     alignSelf: 'flex-end',
+    padding: spacing.xs,
   },
   assistantBubble: {
     backgroundColor: 'transparent',

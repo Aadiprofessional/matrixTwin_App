@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import NotificationsModal from '../../components/ui/NotificationsModal';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 
@@ -121,6 +123,8 @@ export default function ProjectDashboardScreen() {
   const route = useRoute<RouteProps>();
   const { projectId, projectName } = route.params;
   const { user } = useAuthStore();
+  const unreadCount = useNotificationStore(s => s.unreadCount);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const canAccess = (mod: NavModule): boolean => {
     if (!mod.roles) return true;
@@ -180,14 +184,31 @@ export default function ProjectDashboardScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
+      <NotificationsModal visible={showNotifications} onClose={() => setShowNotifications(false)} />
+
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color={colors.textSecondary} />
           <Text style={styles.backText}>Projects</Text>
         </TouchableOpacity>
-        <View style={styles.activeBadge}>
-          <View style={styles.activeDot} />
-          <Text style={styles.activeBadgeText}>ACTIVE</Text>
+        <View style={styles.headerRight}>
+          <View style={styles.activeBadge}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeBadgeText}>ACTIVE</Text>
+          </View>
+          {/* Notification Bell */}
+          <TouchableOpacity
+            style={styles.bellBtn}
+            onPress={() => setShowNotifications(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="bell-outline" size={22} color={colors.textSecondary} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -233,6 +254,23 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   backText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bellBtn: { position: 'relative', padding: 4 },
+  bellBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
+  bellBadgeText: { color: colors.white, fontSize: 10, fontWeight: '700', lineHeight: 13 },
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
