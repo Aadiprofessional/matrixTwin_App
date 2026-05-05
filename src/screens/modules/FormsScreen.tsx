@@ -129,6 +129,16 @@ export default function FormsScreen() {
     fetchData();
   }, [fetchData]);
 
+  // Deep-link: auto-open entry when navigated from a notification
+  const deepLinkedRef = React.useRef(false);
+  useEffect(() => {
+    const initialFormId = (route.params as any)?.initialFormId;
+    if (!initialFormId || deepLinkedRef.current || entries.length === 0) return;
+    const entry = entries.find(e => e.id === initialFormId);
+    if (entry) { deepLinkedRef.current = true; openEntry(entry); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   const templatePages = useMemo(
     () => getTemplatePages(selectedTemplate),
     [selectedTemplate],

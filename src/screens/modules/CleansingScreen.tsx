@@ -25,6 +25,7 @@ import PeopleSelectorModal from '../../components/ui/PeopleSelectorModal';
 import { FormEntryCard, CardMetrics } from '../../components/ui/FormEntryCard';
 import ModuleDetailModal from '../../components/ui/ModuleDetailModal';
 import HistoryModal from '../../components/ui/HistoryModal';
+import DailyCleaningInspectionRN, { CleaningFormData } from '../../components/forms/DailyCleaningInspectionRN';
 
 dayjs.extend(relativeTime);
 
@@ -54,6 +55,7 @@ interface FullEntry extends CleansingEntry {
   cleansing_comments?: Comment[];
   current_node_index?: number;
   name?: string;
+  form_data?: any;
 }
 
 function ExpiryPill({ expiresAt }: { expiresAt?: string }) {
@@ -195,6 +197,16 @@ export default function CleansingScreen() {
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
+  // Deep-link: auto-open detail when navigated from a notification
+  const deepLinkedRef = React.useRef(false);
+  useEffect(() => {
+    const initialFormId = (route.params as any)?.initialFormId;
+    if (!initialFormId || deepLinkedRef.current || entries.length === 0) return;
+    const entry = entries.find(e => e.id === initialFormId);
+    if (entry) { deepLinkedRef.current = true; openDetail(entry); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   const loadMembers = async () => {
     setMembersLoading(true);
     try {
@@ -217,10 +229,19 @@ export default function CleansingScreen() {
     setLoadingDetail(false);
   };
 
-  const handleFormSaved = () => {
-    if (!area.trim()) { Alert.alert('Validation', 'Area is required'); return; }
-    setPendingFormData({ date, project_id: projectId, area, cleaning_type: cleaningType, performed_by: performedBy, materials_used: materialsUsed, notes: formNotes });
-    setEntryName(`${cleaningType} Cleansing - ${dayjs(date).format('DD/MM/YYYY')}`);
+  const handleFormSaved = (formData: CleaningFormData) => {
+    const entryDate = formData.inspectionDate || dayjs().format('YYYY-MM-DD');
+    setPendingFormData({
+      date: entryDate,
+      project_id: projectId,
+      area: formData.location || formData.contractTitle || 'Cleaning Inspection',
+      cleaning_type: 'Inspection',
+      performed_by: formData.inspectorName || '',
+      materials_used: '',
+      notes: formData.contractNo || '',
+      form_data: formData,
+    });
+    setEntryName(`Daily Cleaning - ${dayjs(entryDate).format('DD/MM/YYYY')}`);
     setShowCreate(false);
     setShowProcessFlow(true);
   };
@@ -241,17 +262,20 @@ export default function CleansingScreen() {
     if (!user || !pendingFormData) return;
     setActionLoading(true);
     try {
-      await createCleansingEntry({
-        ...pendingFormData,
-        createdBy: user.id,
-        name: entryName || `Cleansing-${Date.now()}`,
+      const rawFormData = (pendingFormData as any).form_data || pendingFormData;
+      await client.post('/cleansing/create', {
+        formData: rawFormData,
         processNodes,
+        createdBy: user.id,
+        projectId,
+        formId: rawFormData?.formNumber || rawFormData?.form_number,
+        name: entryName || `Cleansing-${Date.now()}`,
       });
       setShowProcessFlow(false);
       setPendingFormData(null);
       setArea(''); setCleaningType('Daily'); setPerformedBy(''); setMaterialsUsed(''); setFormNotes('');
       fetchEntries();
-    } catch (e: any) { Alert.alert('Error', e?.response?.data?.message || 'Failed to create'); }
+    } catch (e: any) { Alert.alert('Error', e?.response?.data?.error || e?.response?.data?.message || 'Failed to create'); }
     setActionLoading(false);
   };
 
@@ -365,65 +389,65 @@ export default function CleansingScreen() {
         </View>
       </View>
 
-      <View style={S.pageHeader}>
-        <Text style={S.pageDesc}>
-          Track and manage cleansing operations with real-time status updates and comprehensive oversight.
-        </Text>
-
-        <View style={S.searchRow}>
-          <View style={S.searchInputWrap}>
-            <Icon name="magnify" size={18} color="#666" />
-            <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={searchQuery} onChangeText={setSearchQuery} />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Icon name="close-circle" size={16} color="#555" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={S.sortBtn}
-            onPress={() => {}}
-          >
-            <Icon
-              name="sort-calendar-descending"
-              size={20}
-              color={ACCENT}
-            />
-          </TouchableOpacity>
-        </View>
-
-
-      <View style={S.tabsRow}>
-        {([
-          { key: 'all',       icon: 'view-list-outline',   count: total,     label: 'All'  },
-          { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
-          { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
-          { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
-        ] as const).map(({ key, icon, count, label }) => {
-          const active = filterStatus === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setFilterStatus(key)}
-              style={[S.tab, active && S.tabActive]}
-            >
-              <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
-              <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
-              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      
-      <Text style={S.shownText}>{filtered.length} shown</Text>
-      </View>
-
       {loading ? <ActivityIndicator color={ACCENT} style={{ flex:1, marginTop:40 }} /> : (
         <FlatList data={filtered} keyExtractor={i => i.id}
-          ListHeaderComponent={() => <View style={{ height: 0 }} />}
           contentContainerStyle={S.listContent}
+          ListHeaderComponent={() => (
+            <View style={S.pageHeader}>
+              <Text style={S.pageDesc}>
+                Track and manage cleansing operations with real-time status updates and comprehensive oversight.
+              </Text>
+
+              <View style={S.searchRow}>
+                <View style={S.searchInputWrap}>
+                  <Icon name="magnify" size={18} color="#666" />
+                  <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={searchQuery} onChangeText={setSearchQuery} />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Icon name="close-circle" size={16} color="#555" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={S.sortBtn}
+                  onPress={() => {}}
+                >
+                  <Icon
+                    name="sort-calendar-descending"
+                    size={20}
+                    color={ACCENT}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={S.tabsRow}>
+                {([
+                  { key: 'all',       icon: 'view-list-outline',   count: total,     label: 'All'  },
+                  { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
+                  { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
+                  { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
+                ] as const).map(({ key, icon, count, label }) => {
+                  const active = filterStatus === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setFilterStatus(key)}
+                      style={[S.tab, active && S.tabActive]}
+                    >
+                      <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
+                      <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+                      <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              
+              <Text style={S.shownText}>{filtered.length} shown</Text>
+            </View>
+          )}
           renderItem={({ item }) => (
-            <FormEntryCard
+            <View style={S.listItem}>
+              <FormEntryCard
               date={dayjs(item.date).format('YYYY-MM-DD')}
               title={(item as any).name || item.area || item.form_number || `Cleansing-${item.id.slice(0, 8)}`}
               status={item.status}
@@ -464,6 +488,7 @@ export default function CleansingScreen() {
                 ]}
               />
             </FormEntryCard>
+            </View>
           )}
           ListEmptyComponent={
             <View style={S.empty}>
@@ -478,20 +503,32 @@ export default function CleansingScreen() {
       <ModuleDetailModal
         visible={showDetail && !!selectedEntry}
         onClose={() => setShowDetail(false)}
-        title={(selectedEntry as any)?.name || selectedEntry?.area || selectedEntry?.form_number || 'Cleansing Details'}
+        title={`Cleansing - ${selectedEntry?.area || selectedEntry?.form_number || 'Details'}`}
         accentColor={ACCENT}
         loading={loadingDetail}
         status={selectedEntry?.status}
+        completionText={selectedEntry ? (() => {
+          const nodes = selectedEntry.cleansing_workflow_nodes || [];
+          const currentNode = (nodes as any[]).find((n: any) => n.node_order === (selectedEntry.current_node_index || 0));
+          if (currentNode && selectedEntry.status === 'pending') {
+            const count = currentNode.completion_count || 0;
+            const max = currentNode.max_completions || 2;
+            return `Completions (${count}/${max})`;
+          }
+          return undefined;
+        })() : undefined}
         metrics={selectedEntry ? [
           { label: 'Type', value: selectedEntry.cleaning_type || 'N/A', color: ACCENT },
           { label: 'Area', value: selectedEntry.area || 'N/A' },
           { label: 'By', value: selectedEntry.performed_by?.split(' ')[0] || 'N/A' },
         ] : []}
         fields={selectedEntry ? [
-          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY') },
-          { label: 'Performed By', value: selectedEntry.performed_by },
-          { label: 'Materials Used', value: selectedEntry.materials_used },
-          { label: 'Notes', value: selectedEntry.notes },
+          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY'), icon: 'calendar-outline', half: true },
+          { label: 'Performed By', value: selectedEntry.performed_by, icon: 'account-outline', half: true },
+          { label: 'Cleaning Type', value: selectedEntry.cleaning_type, icon: 'broom', half: true },
+          { label: 'Area', value: selectedEntry.area, icon: 'floor-plan', half: true },
+          { label: 'Materials Used', value: selectedEntry.materials_used, icon: 'package-variant-closed' },
+          { label: 'Notes', value: selectedEntry.notes, icon: 'file-document-outline' },
         ] : []}
         workflowNodes={(selectedEntry?.cleansing_workflow_nodes || []) as any}
         currentNodeIndex={selectedEntry?.current_node_index || 0}
@@ -503,6 +540,7 @@ export default function CleansingScreen() {
         onApprove={() => handleWorkflowAction('approve')}
         onSendBack={() => handleWorkflowAction('back')}
         onReject={() => handleWorkflowAction('reject')}
+        approveLabel={(selectedEntry?.current_node_index === 1) ? 'Complete' : 'Approve'}
         canEditForm={isAdmin || selectedEntry?.status === 'rejected'}
         onEditForm={() => {
           if (selectedEntry) {
@@ -517,61 +555,34 @@ export default function CleansingScreen() {
         }}
         onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
         onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+        onExport={() => {}}
+        onPrint={() => {}}
       />
 
       {/* Edit Form Modal */}
-      <Modal visible={showFormView} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>Edit Cleansing Entry</Text>
-              <TouchableOpacity onPress={() => setShowFormView(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1, padding: spacing.md }}>
-              <Text style={M.label}>Area *</Text>
-              <TextInput style={M.input} value={editArea} onChangeText={setEditArea} placeholder="e.g. Level 3 Corridor" placeholderTextColor={colors.textMuted} />
-              <Text style={M.label}>Cleaning Type</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm }}>
-                {CLEANING_TYPES.map(t => (
-                  <TouchableOpacity key={t} style={{ borderRadius: 99, borderWidth: 1, borderColor: editCleaningType === t ? ACCENT : '#333', backgroundColor: editCleaningType === t ? ACCENT + '22' : 'transparent', paddingHorizontal: spacing.md, paddingVertical: 6 }} onPress={() => setEditCleaningType(t)}>
-                    <Text style={{ color: editCleaningType === t ? ACCENT : '#555', fontSize: 12, fontWeight: '700' }}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={M.label}>Performed By</Text>
-              <TextInput style={M.input} value={editPerformedBy} onChangeText={setEditPerformedBy} placeholder="Name" placeholderTextColor={colors.textMuted} />
-              <Text style={M.label}>Materials Used</Text>
-              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={editMaterialsUsed} onChangeText={setEditMaterialsUsed} placeholder="List materials..." placeholderTextColor={colors.textMuted} multiline />
-              <Text style={M.label}>Notes</Text>
-              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={editNotes} onChangeText={setEditNotes} placeholder="Additional notes..." placeholderTextColor={colors.textMuted} multiline />
-              <View style={{ height: 20 }} />
-            </ScrollView>
-            <View style={M.mFooter}>
-              <TouchableOpacity style={M.cancelBtn} onPress={() => setShowFormView(false)}><Text style={M.cancelBtnText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity
-                style={[M.saveBtn, { backgroundColor: ACCENT }]}
-                onPress={async () => {
-                  if (!selectedEntry || !user) return;
-                  if (!editArea.trim()) { Alert.alert('Validation', 'Area is required'); return; }
-                  setEditSaving(true);
-                  try {
-                    await client.put(`/cleansing/${selectedEntry.id}`, { area: editArea, cleaning_type: editCleaningType, performed_by: editPerformedBy, materials_used: editMaterialsUsed, notes: editNotes, userId: user.id });
-                    setShowFormView(false);
-                    fetchEntries();
-                    Alert.alert('Success', 'Cleansing entry updated.');
-                  } catch (e: any) {
-                    Alert.alert('Error', e?.response?.data?.error || 'Failed to update');
-                  }
-                  setEditSaving(false);
-                }}
-                disabled={editSaving}
-              >
-                {editSaving ? <ActivityIndicator color="#fff" size="small" /> : <><Icon name="check" size={16} color="#fff" /><Text style={M.saveBtnText}>Save Changes</Text></>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <DailyCleaningInspectionRN
+        key={selectedEntry?.id || 'edit'}
+        visible={showFormView}
+        onClose={() => setShowFormView(false)}
+        initialData={selectedEntry?.form_data}
+        onSave={async (formData: CleaningFormData) => {
+          if (!selectedEntry || !user) return;
+          setEditSaving(true);
+          try {
+            await client.put(`/cleansing/${selectedEntry.id}/update`, {
+              formData: formData,
+              action: 'update',
+              userId: user.id,
+            });
+            setShowFormView(false);
+            fetchEntries();
+            Alert.alert('Success', 'Cleansing entry updated.');
+          } catch (e: any) {
+            Alert.alert('Error', e?.response?.data?.error || 'Failed to update');
+          }
+          setEditSaving(false);
+        }}
+      />
 
       {/* History Modal */}
       <HistoryModal
@@ -596,41 +607,11 @@ export default function CleansingScreen() {
       </Modal>
 
       {/* Create Form Modal */}
-      <Modal visible={showCreate} animationType="slide" transparent>
-        <View style={M.overlay}>
-          <View style={M.sheet}>
-            <View style={M.mHeader}>
-              <Text style={M.mTitle}>New Cleansing Entry</Text>
-              <TouchableOpacity onPress={() => setShowCreate(false)}><Icon name="close" size={22} color={colors.textMuted} /></TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1, padding: spacing.md }}>
-              <Text style={M.label}>Date</Text>
-              <TextInput style={M.input} value={date} onChangeText={setDate} placeholderTextColor={colors.textMuted} />
-              <Text style={M.label}>Area *</Text>
-              <TextInput style={M.input} value={area} onChangeText={setArea} placeholder="e.g. Level 3 Corridor" placeholderTextColor={colors.textMuted} />
-              <Text style={M.label}>Cleaning Type</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm }}>
-                {CLEANING_TYPES.map(t => (
-                  <TouchableOpacity key={t} style={{ borderRadius: 99, borderWidth: 1, borderColor: cleaningType === t ? ACCENT : '#333', backgroundColor: cleaningType === t ? ACCENT + '22' : 'transparent', paddingHorizontal: spacing.md, paddingVertical: 6 }} onPress={() => setCleaningType(t)}>
-                    <Text style={{ color: cleaningType === t ? ACCENT : '#555', fontSize: 12, fontWeight: '700' }}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={M.label}>Performed By</Text>
-              <TextInput style={M.input} value={performedBy} onChangeText={setPerformedBy} placeholder="Name" placeholderTextColor={colors.textMuted} />
-              <Text style={M.label}>Materials Used</Text>
-              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={materialsUsed} onChangeText={setMaterialsUsed} placeholder="List materials..." placeholderTextColor={colors.textMuted} multiline />
-              <Text style={M.label}>Notes</Text>
-              <TextInput style={[M.input, { minHeight: 60, textAlignVertical: 'top' }]} value={formNotes} onChangeText={setFormNotes} placeholder="Additional notes..." placeholderTextColor={colors.textMuted} multiline />
-              <View style={{ height: 20 }} />
-            </ScrollView>
-            <View style={M.mFooter}>
-              <TouchableOpacity style={M.cancelBtn} onPress={() => setShowCreate(false)}><Text style={M.cancelBtnText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={[M.saveBtn, { backgroundColor: ACCENT }]} onPress={handleFormSaved}><Icon name="arrow-right" size={16} color="#fff" /><Text style={M.saveBtnText}>Next: Workflow</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <DailyCleaningInspectionRN
+        visible={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSave={handleFormSaved}
+      />
 
       {/* Process Flow Modal */}
       <Modal visible={showProcessFlow} animationType="slide" transparent>
@@ -681,8 +662,9 @@ const S = StyleSheet.create({
   headerSub: { color: colors.textMuted, fontSize: 12 },
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  listContent: { padding: 20, paddingBottom: 80 },
-  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
+  listContent: { paddingBottom: 80 },
+  listItem: { marginVertical: 8, marginHorizontal: 20 },
+  pageHeader: { paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },

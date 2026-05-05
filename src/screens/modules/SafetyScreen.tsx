@@ -230,6 +230,16 @@ export default function SafetyScreen() {
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
+  // Deep-link: auto-open detail when navigated from a notification
+  const deepLinkedRef = React.useRef(false);
+  useEffect(() => {
+    const initialFormId = (route.params as any)?.initialFormId;
+    if (!initialFormId || deepLinkedRef.current || entries.length === 0) return;
+    const entry = entries.find(e => e.id === initialFormId);
+    if (entry) { deepLinkedRef.current = true; openDetail(entry); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   const loadMembers = async () => {
     setMembersLoading(true);
     try { setProjectMembers((await getProjectMembers(projectId)) || []); } catch { /* silent */ }
@@ -265,26 +275,15 @@ export default function SafetyScreen() {
   const handleFinalSave = async () => {
     if (!pendingFormData || !user) return;
     try {
-      await createSafetyEntry({
-        date: pendingFormData.date || dayjs().format('YYYY-MM-DD'),
-        project_id: projectId,
-        inspector: pendingFormData.inspector,
-        inspector_id: user.id,
-        location: pendingFormData.location,
-        inspection_type: pendingFormData.inspectionType,
-        findings: pendingFormData.findings,
-        corrective_actions: pendingFormData.correctiveActions,
-        risk_level: pendingFormData.riskLevel,
-        safety_score: pendingFormData.score,
-        checklist_items: pendingFormData.checklist.map(r => ({
-          id: r.key, category: r.key.split('::')[0],
-          description: r.key.split('::')[1] || r.key, status: r.status, remarks: r.remarks,
-        })),
+      await client.post('/safety/create', {
+        formData: pendingFormData,
         processNodes,
         createdBy: user.id,
+        projectId,
+        formId: pendingFormData.formNumber,
         name: entryName,
         ...(expiresAt ? { expiresAt } : {}),
-      } as any);
+      });
       setShowProcessFlow(false);
       setPendingFormData(null);
       setExpiresAt('');
@@ -293,7 +292,7 @@ export default function SafetyScreen() {
         { id: '2', type: 'end', name: 'Approval', executor: '', executorId: '', editAccess: false, settings: {} },
       ]);
       loadEntries();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to create entry'); }
+    } catch (e: any) { Alert.alert('Error', e?.response?.data?.error || e?.message || 'Failed to create entry'); }
   };
 
   const handleWorkflowAction = async (action: 'approve' | 'reject' | 'back') => {
@@ -416,59 +415,6 @@ export default function SafetyScreen() {
         </View>
       </View>
 
-      <View style={S.pageHeader}>
-        <Text style={S.pageDesc}>
-          Track safety inspections and compliance with detailed reporting and status monitoring.
-        </Text>
-
-        <View style={S.searchRow}>
-          <View style={S.searchInputWrap}>
-            <Icon name="magnify" size={18} color="#666" />
-            <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={search} onChangeText={setSearch} />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
-                <Icon name="close-circle" size={16} color="#555" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={S.sortBtn}
-            onPress={() => {}}
-          >
-            <Icon
-              name="sort-calendar-descending"
-              size={20}
-              color={ACCENT}
-            />
-          </TouchableOpacity>
-        </View>
-
-      <View style={S.tabsRow}>
-        {([
-          { key: 'all',       icon: 'view-list-outline',   count: entries.length, label: 'All'  },
-          { key: 'pending',   icon: 'clock-outline',        count: entries.filter(e => e.status === 'pending').length, label: 'Pending' },
-          { key: 'completed', icon: 'check-circle-outline', count: entries.filter(e => e.status === 'approved' || e.status === 'completed').length, label: 'Done' },
-          { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected').length, label: 'Rejected' },
-        ] as const).map(({ key, icon, count, label }) => {
-          const active = filterStatus === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setFilterStatus(key)}
-              style={[S.tab, active && S.tabActive]}
-            >
-              <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
-              <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
-              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      
-      <Text style={S.shownText}>{filtered.length} shown</Text>
-      </View>
-
-
       {loading ? (
         <ActivityIndicator color={ACCENT} style={{ marginTop: 40 }} />
       ) : (
@@ -476,44 +422,99 @@ export default function SafetyScreen() {
           data={filtered}
           keyExtractor={i => i.id}
           contentContainerStyle={S.listContent}
-          renderItem={({ item }) => {
+          ListHeaderComponent={() => (
+            <View style={S.pageHeader}>
+              <Text style={S.pageDesc}>
+                Track safety inspections and compliance with detailed reporting and status monitoring.
+              </Text>
+
+              <View style={S.searchRow}>
+                <View style={S.searchInputWrap}>
+                  <Icon name="magnify" size={18} color="#666" />
+                  <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={search} onChangeText={setSearch} />
+                  {search.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearch('')}>
+                      <Icon name="close-circle" size={16} color="#555" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={S.sortBtn}
+                  onPress={() => {}}
+                >
+                  <Icon
+                    name="sort-calendar-descending"
+                    size={20}
+                    color={ACCENT}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={S.tabsRow}>
+                {([
+                  { key: 'all',       icon: 'view-list-outline',   count: entries.length, label: 'All'  },
+                  { key: 'pending',   icon: 'clock-outline',        count: entries.filter(e => e.status === 'pending').length, label: 'Pending' },
+                  { key: 'completed', icon: 'check-circle-outline', count: entries.filter(e => e.status === 'approved' || e.status === 'completed').length, label: 'Done' },
+                  { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected').length, label: 'Rejected' },
+                ] as const).map(({ key, icon, count, label }) => {
+                  const active = filterStatus === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setFilterStatus(key)}
+                      style={[S.tab, active && S.tabActive]}
+                    >
+                      <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
+                      <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+                      <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              
+              <Text style={S.shownText}>{filtered.length} shown</Text>
+            </View>
+          )}
+          renderItem={({ item}) => {
             const score = item.safety_score != null ? `${item.safety_score}%` : 'N/A';
             const scoreColor = item.safety_score != null
               ? (Number(item.safety_score) >= 80 ? '#22c55e' : Number(item.safety_score) >= 60 ? ACCENT : '#ef4444')
               : undefined;
             return (
-              <FormEntryCard
-                date={dayjs(item.created_at).format('YYYY-MM-DD')}
-                title={(item as any).name || item.form_number || `Safety-${item.id.slice(-4)}`}
-                status={item.status}
-                accentColor={ACCENT}
-                expiresAt={item.expires_at}
-                metaItems={[
-                  { icon: 'account-outline', text: item.inspector || '—' },
-                  { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.slice(0, 8)}` },
-                ]}
-                isAdmin={isAdmin}
-                expiryDraft={expiryDrafts[item.id] || ''}
-                onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
-                onSetExpiry={() => handleCardSetExpiry(item, expiryDrafts[item.id] || '')}
-                savingExpiry={!!savingExpiry[item.id]}
-                onSetExpired={() => handleCardSetExpiryStatus(item, 'expired')}
-                updatingExpiry={!!updatingExpiryStatus[item.id]}
-                onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
-                onViewDetails={() => openDetail(item)}
-                onHistory={() => openHistory(item)}
-                showEdit={isAdmin || item.status === 'rejected'}
-                onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
-                onRename={() => openRename(item)}
-                onDelete={() => handleDelete(item)}>
-                <CardMetrics
-                  items={[
-                    { label: 'Score', value: score, color: scoreColor },
-                    { label: 'Type', value: item.inspection_type || '—' },
-                    { label: 'Risk', value: (item.risk_level || '—').toUpperCase(), color: RISK_COLORS[item.risk_level] },
+              <View style={S.listItem}>
+                <FormEntryCard
+                  date={dayjs(item.created_at).format('YYYY-MM-DD')}
+                  title={(item as any).name || item.form_number || `Safety-${item.id.slice(-4)}`}
+                  status={item.status}
+                  accentColor={ACCENT}
+                  expiresAt={item.expires_at}
+                  metaItems={[
+                    { icon: 'account-outline', text: item.inspector || '—' },
+                    { icon: 'file-document-outline', text: `Form No: ${item.form_number || item.id.slice(0, 8)}` },
                   ]}
-                />
-              </FormEntryCard>
+                  isAdmin={isAdmin}
+                  expiryDraft={expiryDrafts[item.id] || ''}
+                  onExpiryDraftChange={(val) => setExpiryDrafts(prev => ({ ...prev, [item.id]: val }))}
+                  onSetExpiry={() => handleCardSetExpiry(item, expiryDrafts[item.id] || '')}
+                  savingExpiry={!!savingExpiry[item.id]}
+                  onSetExpired={() => handleCardSetExpiryStatus(item, 'expired')}
+                  updatingExpiry={!!updatingExpiryStatus[item.id]}
+                  onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
+                  onViewDetails={() => openDetail(item)}
+                  onHistory={() => openHistory(item)}
+                  showEdit={isAdmin || item.status === 'rejected'}
+                  onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
+                  onRename={() => openRename(item)}
+                  onDelete={() => handleDelete(item)}>
+                  <CardMetrics
+                    items={[
+                      { label: 'Score', value: score, color: scoreColor },
+                      { label: 'Type', value: item.inspection_type || '—' },
+                      { label: 'Risk', value: (item.risk_level || '—').toUpperCase(), color: RISK_COLORS[item.risk_level] },
+                    ]}
+                  />
+                </FormEntryCard>
+              </View>
             );
           }}
           ListEmptyComponent={
@@ -570,22 +571,36 @@ export default function SafetyScreen() {
       <ModuleDetailModal
         visible={showDetail && !!selectedEntry}
         onClose={() => setShowDetail(false)}
-        title={(selectedEntry as any)?.name || selectedEntry?.form_number || 'Inspection Details'}
+        title={`Safety Inspection - ${selectedEntry ? dayjs(selectedEntry.date || selectedEntry.created_at).format('DD MMM YYYY') : ''}`}
         accentColor={ACCENT}
         loading={loadingDetail}
         status={selectedEntry?.status}
+        completionText={selectedEntry ? (() => {
+          const nodes = selectedEntry.safety_workflow_nodes || [];
+          const currentNode = nodes.find((n: any) => n.node_order === (selectedEntry.current_node_index || 0));
+          if (currentNode && selectedEntry.status === 'pending') {
+            const count = currentNode.completion_count || 0;
+            const max = currentNode.max_completions || 2;
+            return `Completions (${count}/${max})`;
+          }
+          return undefined;
+        })() : undefined}
         metrics={selectedEntry ? [
           { label: 'Score', value: selectedEntry.safety_score != null ? `${selectedEntry.safety_score}%` : 'N/A', color: selectedEntry.safety_score != null ? (Number(selectedEntry.safety_score) >= 80 ? '#22c55e' : ACCENT) : undefined },
+          { label: 'Findings', value: selectedEntry.findings_count != null ? String(selectedEntry.findings_count) : '0', color: ACCENT },
           { label: 'Risk', value: (selectedEntry.risk_level || '—').toUpperCase(), color: RISK_COLORS[selectedEntry.risk_level] },
-          { label: 'Type', value: selectedEntry.inspection_type || '—' },
         ] : []}
         fields={selectedEntry ? [
-          { label: 'Inspector', value: selectedEntry.inspector },
-          { label: 'Location', value: selectedEntry.location },
-          { label: 'Date', value: dayjs(selectedEntry.date || selectedEntry.created_at).format('DD MMM YYYY') },
-          { label: 'Findings', value: selectedEntry.findings },
-          { label: 'Corrective Actions', value: selectedEntry.corrective_actions },
-          { label: 'Expires At', value: selectedEntry.expires_at ? dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm') : undefined },
+          { label: 'Inspector', value: selectedEntry.inspector, icon: 'account-outline', half: true },
+          { label: 'Inspection Type', value: selectedEntry.inspection_type, icon: 'shield-check-outline', half: true },
+          { label: 'Safety Score', value: selectedEntry.safety_score != null ? `${selectedEntry.safety_score}%` : undefined, icon: 'percent', half: true },
+          { label: 'Findings Count', value: selectedEntry.findings_count != null ? String(selectedEntry.findings_count) : '0', icon: 'alarm-light-outline', half: true },
+          { label: 'Incidents Reported', value: selectedEntry.incidents_reported || selectedEntry.findings, icon: 'alert-outline' },
+          { label: 'Corrective Actions', value: selectedEntry.corrective_actions, icon: 'cog-outline' },
+          { label: 'Notes', value: selectedEntry.notes || selectedEntry.form_data?.notes, icon: 'file-document-outline' },
+          { label: 'Location', value: selectedEntry.location, icon: 'map-marker-outline', half: true },
+          { label: 'Date', value: dayjs(selectedEntry.date || selectedEntry.created_at).format('DD MMM YYYY'), icon: 'calendar-outline', half: true },
+          { label: 'Expires At', value: selectedEntry.expires_at ? dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm') : undefined, icon: 'clock-alert-outline' },
         ] : []}
         workflowNodes={(selectedEntry?.safety_workflow_nodes || []) as any}
         currentNodeIndex={selectedEntry?.current_node_index || 0}
@@ -597,10 +612,13 @@ export default function SafetyScreen() {
         onApprove={() => handleWorkflowAction('approve')}
         onSendBack={() => handleWorkflowAction('back')}
         onReject={() => handleWorkflowAction('reject')}
+        approveLabel={(selectedEntry?.current_node_index === 1) ? 'Complete' : 'Approve'}
         canEditForm={isAdmin || (selectedEntry?.status === 'rejected')}
         onEditForm={() => { setShowDetail(false); setShowFormView(true); }}
         onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
         onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+        onExport={() => {}}
+        onPrint={() => {}}
       />
 
       {/* Edit / View Form Modal */}
@@ -612,12 +630,16 @@ export default function SafetyScreen() {
         onSave={async (data: SafetyFormData) => {
           if (!selectedEntry || !user) return;
           try {
-            await updateSafetyEntry(selectedEntry.id, { ...data, userId: user.id } as any);
+            await client.put(`/safety/${selectedEntry.id}/update`, {
+              formData: data,
+              action: 'update',
+              userId: user.id,
+            });
             setShowFormView(false);
             loadEntries();
             Alert.alert('Success', 'Inspection updated successfully.');
           } catch (e: any) {
-            Alert.alert('Error', e?.message || 'Failed to update');
+            Alert.alert('Error', e?.response?.data?.error || e?.message || 'Failed to update');
           }
         }}
       />
@@ -700,12 +722,13 @@ const S = StyleSheet.create({
   headerSub: { color: colors.textMuted, fontSize: 12 },
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ACCENT, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  listContent: { padding: 20, paddingBottom: 80 },
+  listContent: { paddingBottom: 80 },
+  listItem: { marginVertical: 8, marginHorizontal: 20 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
   searchInput: { flex: 1, color: '#fff', fontSize: 14, marginLeft: 8 },
   sortBtn: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
-  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
+  pageHeader: { paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   tabsRow: { flexDirection: 'row', gap: 6, marginBottom: 14 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#222', gap: 2 },

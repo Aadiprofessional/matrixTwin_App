@@ -186,6 +186,7 @@ export default function RfiScreen() {
   const [workflowComment, setWorkflowComment] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [showFormView, setShowFormView] = useState(false);
+  const [editFormKey, setEditFormKey] = useState(0);
 
   const [showHistory, setShowHistory] = useState(false);
   const [historyEntry, setHistoryEntry] = useState<any | null>(null);
@@ -206,16 +207,104 @@ export default function RfiScreen() {
   const [expiryDrafts, setExpiryDrafts] = useState<Record<string, string>>({});
   const [savingExpiry, setSavingExpiry] = useState<Record<string, boolean>>({});
   const [updatingExpiryStatus, setUpdatingExpiryStatus] = useState<Record<string, boolean>>({});
+  const [sendingNodeReminder, setSendingNodeReminder] = useState<Record<string, boolean>>({});
+
+  // Reminder modal state
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [reminderNode, setReminderNode] = useState<any | null>(null);
+  const [reminderMsg, setReminderMsg] = useState('');
+
+  // History form snapshot state
+  const [showHistoryFormSnapshot, setShowHistoryFormSnapshot] = useState(false);
+  const [selectedHistoryEntry, setSelectedHistoryEntry] = useState<any | null>(null);
 
   const openDetail = async (entry: any) => {
+    console.log('[RfiScreen] openDetail called, entry.id:', entry.id, 'form_type:', entry.form_type);
     setSelectedEntry(entry);
     setShowDetail(true);
     setLoadingDetail(true);
     try {
       const res = await client.get(`/${entry.form_type}/${entry.id}`);
+      console.log('[RfiScreen] openDetail API response keys:', Object.keys(res.data || {}));
+      console.log('[RfiScreen] openDetail API response.form_data:', JSON.stringify(res.data?.form_data));
+      console.log('[RfiScreen] openDetail API response (root fields):', JSON.stringify({ risc_no: res.data?.risc_no, supervisor: res.data?.supervisor, works_to_be_inspected: res.data?.works_to_be_inspected, contract_no: res.data?.contract_no, location: res.data?.location }));
       setSelectedEntry({ ...res.data, form_type: entry.form_type });
-    } catch {}
+    } catch (e: any) {
+      console.log('[RfiScreen] openDetail error:', e?.message);
+    }
     setLoadingDetail(false);
+  };
+
+  const openFormView = async (entry: any) => {
+    console.log('[RfiScreen] openFormView called, entry.id:', entry.id, 'has form_data:', !!entry.form_data);
+    setSelectedEntry(entry);
+    if (!entry.form_data) {
+      try {
+        const res = await client.get(`/${entry.form_type}/${entry.id}`);
+        console.log('[RfiScreen] openFormView fetched full entry, form_data:', JSON.stringify(res.data?.form_data));
+        setSelectedEntry({ ...res.data, form_type: entry.form_type });
+      } catch (e: any) {
+        console.log('[RfiScreen] openFormView fetch error:', e?.message);
+      }
+    } else {
+      console.log('[RfiScreen] openFormView using existing form_data:', JSON.stringify(entry.form_data));
+    }
+    setEditFormKey(k => k + 1);
+    setShowFormView(true);
+  };
+
+  const resolveFormData = (entry: any): any => {
+    console.log('[RfiScreen] resolveFormData entry id:', entry?.id, 'has form_data:', !!entry?.form_data, 'form_data type:', typeof entry?.form_data);
+    if (entry?.form_data && typeof entry.form_data === 'object' && Object.keys(entry.form_data).length > 0) {
+      console.log('[RfiScreen] resolveFormData using form_data, keys:', Object.keys(entry.form_data));
+      return entry.form_data;
+    }
+    const mapped = {
+      riscNo: entry?.risc_no || entry?.riscNo,
+      contractNo: entry?.contract_no || entry?.contractNo,
+      revision: entry?.revision,
+      supervisor: entry?.supervisor,
+      attention: entry?.attention,
+      works: entry?.works,
+      location: entry?.location,
+      worksToBeInspected: entry?.works_to_be_inspected || entry?.worksToBeInspected,
+      worksCategory: entry?.works_category || entry?.worksCategory,
+      inspectionDate: entry?.inspection_date || entry?.inspectionDate || entry?.date,
+      inspectionTime: entry?.inspection_time || entry?.inspectionTime,
+      nextOperation: entry?.next_operation || entry?.nextOperation,
+      generalCleaning: entry?.general_cleaning || entry?.generalCleaning,
+      scheduledDate: entry?.scheduled_date || entry?.scheduledDate,
+      scheduledTime: entry?.scheduled_time || entry?.scheduledTime,
+      equipment: entry?.equipment,
+      issueTime: entry?.issue_time || entry?.issueTime,
+      issuedBy: entry?.issued_by || entry?.issuedBy,
+      issueDate: entry?.issue_date || entry?.issueDate,
+      receivedTime: entry?.received_time || entry?.receivedTime,
+      receivedBy: entry?.received_by || entry?.receivedBy,
+      receivedDate: entry?.received_date || entry?.receivedDate,
+      siteAgentAttention: entry?.site_agent_attention || entry?.siteAgentAttention,
+      inspectedBy: entry?.inspected_by || entry?.inspectedBy || entry?.inspector,
+      inspectedAt: entry?.inspected_at || entry?.inspectedAt,
+      noObjection: entry?.no_objection || entry?.noObjection,
+      deficienciesNoted: entry?.deficiencies_noted || entry?.deficienciesNoted,
+      deficiencies: entry?.deficiencies || ['', '', '', '', '', '', ''],
+      formReturnedTime: entry?.form_returned_time || entry?.formReturnedTime,
+      formReturnedDate: entry?.form_returned_date || entry?.formReturnedDate,
+      formReturnedBy: entry?.form_returned_by || entry?.formReturnedBy,
+      counterSignedTime: entry?.counter_signed_time || entry?.counterSignedTime,
+      counterSignedDate: entry?.counter_signed_date || entry?.counterSignedDate,
+      counterSignedBy: entry?.counter_signed_by || entry?.counterSignedBy,
+      formReceivedTime: entry?.form_received_time || entry?.formReceivedTime,
+      formReceivedDate: entry?.form_received_date || entry?.formReceivedDate,
+      formReceivedBy: entry?.form_received_by || entry?.formReceivedBy,
+      project: entry?.project || entry?.name,
+      survey: entry?.survey,
+      surveyField: entry?.survey_field || entry?.surveyField,
+      surveyedBy: entry?.surveyed_by || entry?.surveyedBy || entry?.surveyor,
+      surveyedAt: entry?.surveyed_at || entry?.surveyedAt,
+    };
+    console.log('[RfiScreen] resolveFormData fallback mapped riscNo:', mapped.riscNo, 'contractNo:', mapped.contractNo);
+    return mapped;
   };
 
   const loadEntries = useCallback(async () => {
@@ -267,30 +356,98 @@ export default function RfiScreen() {
 
   const handleFinalSave = async () => {
     if (!pendingFormData || !user) return;
+    if (!entryName.trim()) { Alert.alert('Validation', 'Please provide an entry name.'); return; }
+
     try {
-      await client.post(pendingType === 'inspection' ? '/inspection/create' : '/survey/create', {
-        formData: pendingFormData, processNodes, createdBy: user.id, projectId, name: entryName, ...(expiresAt ? { expiresAt } : {}),
+      // Prepare process nodes for backend
+      const processNodesForBackend = processNodes.map(node => ({
+        ...node,
+        executorId: node.executorId,
+        executorName: node.executor,
+        editAccess: node.editAccess !== false,
+      }));
+
+      const formType = pendingType;
+
+      // Generate RISC number if missing
+      const generatedRiscNo = (pendingFormData as any).riscNo || `RISC-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      const mappedFormData: any = {
+        ...(pendingFormData as any),
+        project: projectName || 'Unknown Project',
+        projectId,
+        riscNo: generatedRiscNo,
+      };
+
+      if (formType === 'survey') {
+        delete mappedFormData.inspectionTime;
+      } else {
+        // Inspection-specific field defaults
+        mappedFormData.inspectionTime = mappedFormData.inspectionTime || '09:00';
+        mappedFormData.inspectionDate = mappedFormData.inspectionDate || new Date().toISOString().split('T')[0];
+        mappedFormData.inspector = mappedFormData.inspectedBy || user.name || 'Unknown Inspector';
+        mappedFormData.contractNo = mappedFormData.contractNo || 'N/A';
+        mappedFormData.revision = mappedFormData.revision || 'Rev-1';
+        mappedFormData.supervisor = mappedFormData.supervisor || 'N/A';
+        mappedFormData.attention = mappedFormData.attention || 'N/A';
+        mappedFormData.location = mappedFormData.location || 'N/A';
+        mappedFormData.worksToBeInspected = mappedFormData.worksToBeInspected || 'General inspection';
+        mappedFormData.worksCategory = mappedFormData.worksCategory || 'General';
+        mappedFormData.nextOperation = mappedFormData.nextOperation || 'N/A';
+        mappedFormData.generalCleaning = mappedFormData.generalCleaning || 'N/A';
+        mappedFormData.scheduledTime = mappedFormData.scheduledTime || '10:00';
+        mappedFormData.scheduledDate = mappedFormData.scheduledDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
+        mappedFormData.equipment = mappedFormData.equipment || 'N/A';
+        mappedFormData.noObjection = mappedFormData.noObjection !== undefined ? mappedFormData.noObjection : false;
+        mappedFormData.deficienciesNoted = mappedFormData.deficienciesNoted !== undefined ? mappedFormData.deficienciesNoted : false;
+        mappedFormData.deficiencies = mappedFormData.deficiencies || [];
+      }
+
+      await client.post(formType === 'inspection' ? '/inspection/create' : '/survey/create', {
+        formData: mappedFormData,
+        processNodes: processNodesForBackend,
+        createdBy: user.id,
+        projectId,
+        formId: generatedRiscNo,
+        name: entryName.trim(),
+        ...(expiresAt ? { expiresAt } : {}),
       });
+
       setShowProcessFlow(false);
       setPendingFormData(null);
       setExpiresAt('');
+      setEntryName('');
       setProcessNodes([
         { id: '1', type: 'start', name: 'Submit', executor: user?.name || '', executorId: user?.id || '', editAccess: true, settings: {} },
         { id: '2', type: 'end', name: 'Approval', executor: '', executorId: '', editAccess: false, settings: {} },
       ]);
       loadEntries();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to create entry'); }
+      Alert.alert('Success', `${formType === 'survey' ? 'Survey' : 'Inspection'} check created successfully!`);
+    } catch (e: any) { Alert.alert('Error', e?.response?.data?.error || e?.message || 'Failed to create entry'); }
   };
 
   const handleWorkflowAction = async (action: 'approve' | 'reject' | 'back') => {
     if (!selectedEntry || !user) return;
+    // Require a comment for reject/back (matching web behaviour)
+    if ((action === 'reject' || action === 'back') && !workflowComment.trim()) {
+      Alert.alert('Comment Required', `A comment is required when ${action === 'reject' ? 'rejecting' : 'sending back'} an entry.`);
+      return;
+    }
     setActionLoading(true);
     try {
-      await client.put(`/${selectedEntry.form_type}/${selectedEntry.id}/update`, { action, comment: workflowComment, userId: user.id });
+      const result = await client.put(`/${selectedEntry.form_type}/${selectedEntry.id}/update`, { action, comment: workflowComment.trim(), userId: user.id });
+      if (result.data?.permanently_rejected) {
+        Alert.alert('Permanently Rejected', 'Entry has been permanently rejected — no more edits are allowed as all nodes have reached their completion limit.');
+      } else {
+        Alert.alert('Success', `Entry ${action}d successfully! Notifications have been sent.`);
+      }
       setWorkflowComment('');
       setShowDetail(false);
       loadEntries();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Action failed'); }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Action failed';
+      Alert.alert('Error', msg);
+    }
     finally { setActionLoading(false); }
   };
 
@@ -363,11 +520,75 @@ export default function RfiScreen() {
     setUpdatingExpiryStatus(prev => ({ ...prev, [entry.id]: false }));
   };
 
-  const canApprove = () => {
-    if (!selectedEntry || !user) return false;
-    const nodes = selectedEntry.workflow_nodes || selectedEntry.inspection_workflow_nodes || selectedEntry.survey_workflow_nodes || [];
-    const node = nodes[selectedEntry.current_node_index ?? 0];
-    return node && (node.executor_id === user.id || isAdmin);
+  // ── Permission checks (matching web RfiPage logic) ──────────
+  const canUserEditEntry = (entry: any) => {
+    if (!user?.id) return false;
+    if (entry.status === 'permanently_rejected' || entry.status === 'closed') return false;
+    if (isAdmin && (entry.status === 'pending' || entry.status === 'rejected')) return true;
+    const nodes = entry.workflow_nodes || entry.inspection_workflow_nodes || entry.survey_workflow_nodes || [];
+    const currentNode = nodes.find((n: any) => n.node_order === (entry.current_node_index ?? 0));
+    if (currentNode && currentNode.executor_id === user.id && entry.status === 'rejected') return true;
+    return false;
+  };
+
+  const canUserUpdateForm = (entry: any) => {
+    if (!user?.id) return false;
+    if (entry.status === 'permanently_rejected' || entry.status === 'closed') return false;
+    if (isAdmin && entry.created_by === user.id) return true;
+    const nodes = entry.workflow_nodes || entry.inspection_workflow_nodes || entry.survey_workflow_nodes || [];
+    const currentNode = nodes.find((n: any) => n.node_order === (entry.current_node_index ?? 0));
+    if (currentNode && currentNode.executor_id === user.id) {
+      if (entry.status === 'rejected') return true;
+      const completionCount = currentNode.completion_count || 0;
+      const maxCompletions = currentNode.max_completions || 2;
+      return (currentNode.can_re_edit !== false) && completionCount < maxCompletions;
+    }
+    const isAssigned = (entry.rfi_assignments || entry.inspection_assignments || entry.survey_assignments || []).some(
+      (a: any) => a.user_id === user.id && a.node_id === currentNode?.node_id
+    );
+    return isAssigned && entry.status === 'rejected';
+  };
+
+  const canUserApproveEntry = (entry: any) => {
+    if (!user?.id) return false;
+    if (entry.status === 'permanently_rejected' || entry.status === 'completed' || entry.status === 'closed') return false;
+    if (isAdmin) return true;
+    const nodes = entry.workflow_nodes || entry.inspection_workflow_nodes || entry.survey_workflow_nodes || [];
+    const currentNode = nodes.find((n: any) => n.node_order === (entry.current_node_index ?? 0));
+    if (currentNode && currentNode.executor_id === user.id) {
+      if (entry.status === 'rejected') return true;
+      const completionCount = currentNode.completion_count || 0;
+      const maxCompletions = currentNode.max_completions || 2;
+      return (currentNode.can_re_edit !== false) && completionCount < maxCompletions;
+    }
+    return false;
+  };
+
+  // ── Node reminder (matching web handleNodeReminder) ──────────
+  const handleNodeReminder = (node: any) => {
+    if (!isAdmin || !selectedEntry) return;
+    const defaultMsg = `Reminder: Please action "${node.node_name || node.name}" step.`;
+    setReminderNode(node);
+    setReminderMsg(defaultMsg);
+    setShowReminderModal(true);
+  };
+
+  const sendNodeReminder = async () => {
+    if (!reminderNode || !selectedEntry || !user) return;
+    const key = String(reminderNode.node_order);
+    try {
+      setSendingNodeReminder(prev => ({ ...prev, [key]: true }));
+      await client.post(`/${selectedEntry.form_type}/${selectedEntry.id}/nodes/${reminderNode.node_order}/delay-notify`, {
+        userId: user.id,
+        message: reminderMsg.trim(),
+      });
+      setShowReminderModal(false);
+      Alert.alert('Success', 'Reminder sent successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error || 'Failed to send reminder.');
+    } finally {
+      setSendingNodeReminder(prev => ({ ...prev, [key]: false }));
+    }
   };
 
   const filtered = entries.filter(e => {
@@ -401,61 +622,6 @@ export default function RfiScreen() {
         </View>
       </View>
 
-      <View style={S.pageHeader}>
-        <Text style={S.pageDesc}>
-          Manage Requests for Information (RFI) and Site Inspection Reports with comprehensive tracking.
-        </Text>
-
-        <View style={S.searchRow}>
-          <View style={S.searchInputWrap}>
-            <Icon name="magnify" size={18} color="#666" />
-            <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={search} onChangeText={setSearch} />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
-                <Icon name="close-circle" size={16} color="#555" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={S.sortBtn}
-            onPress={() => {}}
-          >
-            <Icon
-              name="sort-calendar-descending"
-              size={20}
-              color={INSPECTION_COLOR}
-            />
-          </TouchableOpacity>
-        </View>
-
-      <View style={S.tabsRow}>
-        {([
-          { key: 'all',         icon: 'view-list-outline',   count: entries.length, label: 'All' },
-          { key: 'inspection',  icon: 'clipboard-check-outline', count: entries.filter(e => e.form_type === 'inspection').length, label: 'Insp' },
-          { key: 'survey',      icon: 'ruler-square-compass', count: entries.filter(e => e.form_type === 'survey').length, label: 'Surv' },
-          { key: 'approved',    icon: 'check-circle-outline', count: entries.filter(e => e.status === 'approved' || e.status === 'completed').length, label: 'Done' },
-          { key: 'rejected',    icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected').length, label: 'Rej' },
-        ] as const).map(({ key, icon, count, label }) => {
-          const active = filter === key;
-          const accent = key === 'inspection' ? INSPECTION_COLOR : key === 'survey' ? SURVEY_COLOR : key === 'approved' ? '#22c55e' : key === 'rejected' ? '#ef4444' : '#555';
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setFilter(key as FilterType)}
-              style={[S.tab, active && S.tabActive]}
-            >
-              <Icon name={icon} size={15} color={active ? accent : '#666'} />
-              <Text style={[S.tabText, active && { color: accent }]}>{count}</Text>
-              <Text style={[S.tabLabel, active && { color: accent }]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      
-      <Text style={S.shownText}>{filtered.length} shown</Text>
-      </View>
-
-
       {loading ? (
         <ActivityIndicator color={INSPECTION_COLOR} style={{ marginTop: 40 }} />
       ) : (
@@ -463,11 +629,67 @@ export default function RfiScreen() {
           data={filtered}
           keyExtractor={i => i.form_type + '-' + i.id}
           contentContainerStyle={S.listContent}
+          ListHeaderComponent={() => (
+            <View style={S.pageHeader}>
+              <Text style={S.pageDesc}>
+                Manage Requests for Information (RFI) and Site Inspection Reports with comprehensive tracking.
+              </Text>
+
+              <View style={S.searchRow}>
+                <View style={S.searchInputWrap}>
+                  <Icon name="magnify" size={18} color="#666" />
+                  <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={search} onChangeText={setSearch} />
+                  {search.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearch('')}>
+                      <Icon name="close-circle" size={16} color="#555" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={S.sortBtn}
+                  onPress={() => {}}
+                >
+                  <Icon
+                    name="sort-calendar-descending"
+                    size={20}
+                    color={INSPECTION_COLOR}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={S.tabsRow}>
+                {([
+                  { key: 'all',         icon: 'view-list-outline',   count: entries.length, label: 'All' },
+                  { key: 'inspection',  icon: 'clipboard-check-outline', count: entries.filter(e => e.form_type === 'inspection').length, label: 'Insp' },
+                  { key: 'survey',      icon: 'ruler-square-compass', count: entries.filter(e => e.form_type === 'survey').length, label: 'Surv' },
+                  { key: 'approved',    icon: 'check-circle-outline', count: entries.filter(e => e.status === 'approved' || e.status === 'completed').length, label: 'Done' },
+                  { key: 'rejected',    icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected').length, label: 'Rej' },
+                ] as const).map(({ key, icon, count, label }) => {
+                  const active = filter === key;
+                  const accent = key === 'inspection' ? INSPECTION_COLOR : key === 'survey' ? SURVEY_COLOR : key === 'approved' ? '#22c55e' : key === 'rejected' ? '#ef4444' : '#555';
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setFilter(key as FilterType)}
+                      style={[S.tab, active && S.tabActive]}
+                    >
+                      <Icon name={icon} size={15} color={active ? accent : '#666'} />
+                      <Text style={[S.tabText, active && { color: accent }]}>{count}</Text>
+                      <Text style={[S.tabLabel, active && { color: accent }]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              
+              <Text style={S.shownText}>{filtered.length} shown</Text>
+            </View>
+          )}
           renderItem={({ item }) => {
             const isInspection = item.form_type === 'inspection';
             const accent = isInspection ? INSPECTION_COLOR : SURVEY_COLOR;
             return (
-              <FormEntryCard
+              <View style={S.listItem}>
+                <FormEntryCard
                 date={dayjs(item.created_at).format('YYYY-MM-DD')}
                 title={item.name || item.risc_no || `RISC-${(item.id || '').slice(-6)}`}
                 status={item.status}
@@ -488,8 +710,8 @@ export default function RfiScreen() {
                 onSetActive={() => handleCardSetExpiryStatus(item, 'active')}
                 onViewDetails={() => openDetail(item)}
                 onHistory={() => openHistory(item)}
-                showEdit={isAdmin || item.status === 'rejected'}
-                onEdit={() => { setSelectedEntry(item); setShowFormView(true); }}
+                showEdit={canUserEditEntry(item) || canUserUpdateForm(item)}
+                onEdit={() => openFormView(item)}
                 onRename={() => openRename(item)}
                 onDelete={() => handleDelete(item)}
               >
@@ -501,6 +723,7 @@ export default function RfiScreen() {
                   ]}
                 />
               </FormEntryCard>
+              </View>
             );
           }}
           ListEmptyComponent={
@@ -588,55 +811,75 @@ export default function RfiScreen() {
       <ModuleDetailModal
         visible={showDetail && !!selectedEntry}
         onClose={() => setShowDetail(false)}
-        title={selectedEntry?.name || selectedEntry?.risc_no || (selectedEntry?.form_type === 'inspection' ? 'Inspection Details' : 'Survey Details')}
+        title={`RFI Details`}
         accentColor={accentFor(selectedEntry)}
         loading={loadingDetail}
         status={selectedEntry?.status}
+        completionText={selectedEntry ? (() => {
+          const nodes = selectedEntry?.workflow_nodes || selectedEntry?.inspection_workflow_nodes || selectedEntry?.survey_workflow_nodes || [];
+          const currentNode = (nodes as any[]).find((n: any) => n.node_order === (selectedEntry.current_node_index || 0));
+          if (currentNode && selectedEntry.status === 'pending') {
+            const count = currentNode.completion_count || 0;
+            const max = currentNode.max_completions || 2;
+            return `Completions (${count}/${max})`;
+          }
+          return undefined;
+        })() : undefined}
         metrics={selectedEntry ? [
-          { label: 'RISC No', value: selectedEntry.risc_no || '—', color: accentFor(selectedEntry) },
-          { label: 'Category', value: selectedEntry.works_category || '—' },
-          { label: 'Location', value: selectedEntry.location || '—' },
+          { label: 'RISC No', value: selectedEntry.risc_no || selectedEntry.form_data?.riscNo || selectedEntry.form_data?.risc_no || '—', color: accentFor(selectedEntry) },
+          { label: 'Category', value: selectedEntry.works_category || selectedEntry.form_data?.worksCategory || '—' },
+          { label: 'Location', value: selectedEntry.location || selectedEntry.form_data?.location || '—' },
         ] : []}
         fields={selectedEntry ? [
-          { label: 'Supervisor', value: selectedEntry.supervisor },
-          { label: 'Contract No', value: selectedEntry.contract_no },
-          { label: 'Attention', value: selectedEntry.attention },
-          { label: 'Location', value: selectedEntry.location },
+          { label: 'Submitted By', value: selectedEntry.submittedBy || selectedEntry.supervisor || selectedEntry.form_data?.supervisor || selectedEntry.surveyor || selectedEntry.form_data?.surveyor || selectedEntry.created_by, icon: 'account-outline', half: true },
+          { label: 'Priority', value: selectedEntry.priority ? (selectedEntry.priority.charAt(0).toUpperCase() + selectedEntry.priority.slice(1)) : 'Medium', icon: 'flag-outline', half: true },
+          { label: 'Description', value: selectedEntry.description || selectedEntry.works_to_be_inspected || selectedEntry.form_data?.worksToBeInspected || selectedEntry.survey || selectedEntry.form_data?.survey, icon: 'text-box-outline' },
+          { label: 'Assigned To', value: selectedEntry.assignedTo || selectedEntry.form_data?.assignedTo, icon: 'account-check-outline' },
+          { label: 'Response', value: selectedEntry.response || selectedEntry.form_data?.response || 'No response yet', icon: 'comment-outline' },
+          { label: 'Contract No', value: selectedEntry.contract_no || selectedEntry.form_data?.contractNo, icon: 'file-sign', half: true },
+          { label: 'Revision', value: selectedEntry.revision || selectedEntry.form_data?.revision, icon: 'source-branch', half: true },
           ...(selectedEntry.form_type === 'inspection' ? [
-            { label: 'Works to be Inspected', value: selectedEntry.works_to_be_inspected },
-            { label: 'Next Operation', value: selectedEntry.next_operation },
-            { label: 'Inspected By', value: selectedEntry.inspected_by },
+            { label: 'Works to be Inspected', value: selectedEntry.works_to_be_inspected || selectedEntry.form_data?.worksToBeInspected, icon: 'clipboard-list-outline' },
+            { label: 'Inspection Date', value: selectedEntry.inspection_date || selectedEntry.form_data?.inspectionDate, icon: 'calendar-outline', half: true as const },
+            { label: 'Inspection Time', value: selectedEntry.inspection_time || selectedEntry.form_data?.inspectionTime, icon: 'clock-outline', half: true as const },
+            { label: 'Next Operation', value: selectedEntry.next_operation || selectedEntry.form_data?.nextOperation, icon: 'arrow-right-circle-outline' },
+            { label: 'Inspected By', value: selectedEntry.inspected_by || selectedEntry.inspector || selectedEntry.form_data?.inspectedBy, icon: 'account-search-outline' },
           ] : [
-            { label: 'Survey Description', value: selectedEntry.survey },
-            { label: 'Survey Field', value: selectedEntry.survey_field },
-            { label: 'Surveyed By', value: selectedEntry.surveyed_by },
+            { label: 'Survey Description', value: selectedEntry.survey || selectedEntry.form_data?.survey, icon: 'clipboard-text-outline' },
+            { label: 'Survey Field', value: selectedEntry.survey_field || selectedEntry.form_data?.surveyField, icon: 'map-outline' },
+            { label: 'Surveyed By', value: selectedEntry.surveyed_by || selectedEntry.surveyor || selectedEntry.form_data?.surveyedBy, icon: 'account-search-outline' },
           ]),
-          { label: 'Issued By', value: selectedEntry.issued_by },
-          { label: 'Expires At', value: selectedEntry.expires_at ? dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm') : undefined },
+          { label: 'Issued By', value: selectedEntry.issued_by || selectedEntry.form_data?.issuedBy, icon: 'account-arrow-right-outline', half: true },
+          { label: 'Expires At', value: selectedEntry.expires_at ? dayjs(selectedEntry.expires_at).format('DD MMM YYYY HH:mm') : undefined, icon: 'clock-alert-outline', half: true },
         ] : []}
         workflowNodes={(selectedEntry?.workflow_nodes || selectedEntry?.inspection_workflow_nodes || selectedEntry?.survey_workflow_nodes || []) as any}
         currentNodeIndex={selectedEntry?.current_node_index || 0}
         comments={(selectedEntry?.comments || selectedEntry?.inspection_comments || selectedEntry?.survey_comments || []) as any}
-        canApprove={canApprove()}
+        canApprove={selectedEntry ? canUserApproveEntry(selectedEntry) && (selectedEntry.status === 'pending' || selectedEntry.status === 'rejected') : false}
         actionLoading={actionLoading}
         workflowComment={workflowComment}
         onWorkflowCommentChange={setWorkflowComment}
         onApprove={() => handleWorkflowAction('approve')}
         onSendBack={() => handleWorkflowAction('back')}
         onReject={() => handleWorkflowAction('reject')}
-        canEditForm={isAdmin || selectedEntry?.status === 'rejected'}
-        onEditForm={() => { setShowDetail(false); setShowFormView(true); }}
+        approveLabel={(selectedEntry?.current_node_index === 1) ? 'Complete' : 'Approve'}
+        canEditForm={selectedEntry ? (canUserUpdateForm(selectedEntry) || canUserEditEntry(selectedEntry)) : false}
+        onEditForm={() => { setShowDetail(false); setEditFormKey(k => k + 1); setShowFormView(true); }}
+        onNodeReminder={isAdmin ? handleNodeReminder : undefined}
+        nodeReminderLoading={Object.fromEntries(Object.entries(sendingNodeReminder).map(([k, v]) => [k, v]))}
         onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
         onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+        onExport={() => {}}
+        onPrint={() => {}}
       />
 
       {/* Edit Form Modals (conditional on form type) */}
       {selectedEntry?.form_type === 'inspection' ? (
         <InspectionCheckFormRN
-          key={selectedEntry?.id || ''}
+          key={editFormKey}
           visible={showFormView}
           onClose={() => setShowFormView(false)}
-          initialData={selectedEntry?.form_data}
+          initialData={resolveFormData(selectedEntry)}
           onSave={async (data: InspectionFormData) => {
             if (!selectedEntry || !user) return;
             try {
@@ -649,10 +892,10 @@ export default function RfiScreen() {
         />
       ) : (
         <SurveyCheckFormRN
-          key={selectedEntry?.id || ''}
+          key={editFormKey}
           visible={showFormView}
           onClose={() => setShowFormView(false)}
-          initialData={selectedEntry?.form_data}
+          initialData={resolveFormData(selectedEntry)}
           onSave={async (data: SurveyFormData) => {
             if (!selectedEntry || !user) return;
             try {
@@ -670,8 +913,90 @@ export default function RfiScreen() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         history={historyList}
+        loading={historyLoading}
+        isAdmin={isAdmin}
         onRestore={(h) => restoreHistory(h.id)}
+        onView={(h) => {
+          setSelectedHistoryEntry(h);
+          setShowHistory(false);
+          setShowHistoryFormSnapshot(true);
+        }}
       />
+
+      {/* History Form Snapshot Modal */}
+      {showHistoryFormSnapshot && selectedHistoryEntry && historyEntry && (
+        <Modal visible={showHistoryFormSnapshot} animationType="slide" transparent>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)' }}>
+            {historyEntry.form_type === 'inspection' ? (
+              <InspectionCheckFormRN
+                key={'snapshot-' + selectedHistoryEntry.id}
+                visible
+                onClose={() => { setShowHistoryFormSnapshot(false); setShowHistory(true); }}
+                initialData={selectedHistoryEntry.form_data}
+                onSave={() => { setShowHistoryFormSnapshot(false); setShowHistory(true); }}
+              />
+            ) : historyEntry.form_type === 'survey' ? (
+              <SurveyCheckFormRN
+                key={'snapshot-' + selectedHistoryEntry.id}
+                visible
+                onClose={() => { setShowHistoryFormSnapshot(false); setShowHistory(true); }}
+                initialData={selectedHistoryEntry.form_data}
+                onSave={() => { setShowHistoryFormSnapshot(false); setShowHistory(true); }}
+              />
+            ) : (
+              <View style={M.centeredOverlay}>
+                <View style={M.dialog}>
+                  <Text style={M.mTitle}>Form Snapshot</Text>
+                  <ScrollView style={{ maxHeight: 400, marginTop: spacing.sm }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: 'monospace' }}>
+                      {JSON.stringify(selectedHistoryEntry.form_data, null, 2)}
+                    </Text>
+                  </ScrollView>
+                  <TouchableOpacity style={[M.cancelBtn, { marginTop: spacing.md }]} onPress={() => { setShowHistoryFormSnapshot(false); setShowHistory(true); }}>
+                    <Text style={M.cancelBtnText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </Modal>
+      )}
+
+      {/* Node Reminder Modal */}
+      <Modal visible={showReminderModal} animationType="fade" transparent>
+        <View style={M.centeredOverlay}>
+          <View style={M.dialog}>
+            <Text style={M.mTitle}>Send Reminder</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.xs }}>
+              Enter reminder message for: {reminderNode?.node_name || reminderNode?.name || 'this step'}
+            </Text>
+            <TextInput
+              style={[M.input, { marginTop: spacing.sm, minHeight: 80, textAlignVertical: 'top' }]}
+              value={reminderMsg}
+              onChangeText={setReminderMsg}
+              placeholder="Enter reminder message..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+              <TouchableOpacity style={[M.cancelBtn, { flex: 1 }]} onPress={() => setShowReminderModal(false)}>
+                <Text style={M.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[M.saveBtn, { flex: 1, backgroundColor: accentFor(selectedEntry) }]}
+                onPress={sendNodeReminder}
+                disabled={!!sendingNodeReminder[String(reminderNode?.node_order)]}
+              >
+                {sendingNodeReminder[String(reminderNode?.node_order)] ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={M.saveBtnText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Rename Modal */}
       <Modal visible={showRename} animationType="fade" transparent>
@@ -735,12 +1060,13 @@ const S = StyleSheet.create({
   headerSub: { color: colors.textMuted, fontSize: 12 },
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  listContent: { padding: 20, paddingBottom: 80 },
+  listContent: { paddingBottom: 80 },
+  listItem: { marginVertical: 8, marginHorizontal: 20 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },
   searchInput: { flex: 1, color: '#fff', fontSize: 14, marginLeft: 8 },
   sortBtn: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },
-  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
+  pageHeader: { paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   tabsRow: { flexDirection: 'row', gap: 6, marginBottom: 14 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: '#111', borderWidth: 1, borderColor: '#222', gap: 2 },

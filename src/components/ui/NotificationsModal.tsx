@@ -4,21 +4,43 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   FlatList,
   ActivityIndicator,
   StyleSheet,
   Animated,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useProjectStore } from '../../store/projectStore';
 import type { Notification } from '../../api/notifications';
+import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 
+type Nav = NativeStackNavigationProp<AppStackParamList>;
+
+// Mirrors website's notificationService.handleNotificationClick form_type → route mapping
+function formTypeToScreen(formType: string | undefined): keyof AppStackParamList | null {
+  if (!formType) return null;
+  const ft = (formType === 'inspection' || formType === 'survey') ? 'rfi' : formType.toLowerCase();
+  const map: Partial<Record<string, keyof AppStackParamList>> = {
+    diary: 'Diary',
+    safety: 'Safety',
+    labour: 'Labour',
+    cleansing: 'Cleansing',
+    rfi: 'Rfi',
+    forms: 'Forms',
+  };
+  return map[ft] ?? null;
+}
+
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const PANEL_HEIGHT = SCREEN_HEIGHT * 0.72;
 
 interface Props {
   visible: boolean;
@@ -101,8 +123,10 @@ export default function NotificationsModal({ visible, onClose }: Props) {
     clearAll,
     formatRelativeTime,
   } = useNotificationStore();
+  const { projects } = useProjectStore();
+  const navigation = useNavigation<Nav>();
 
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const slideAnim = useRef(new Animated.Value(PANEL_HEIGHT)).current;
 
   useEffect(() => {
     if (visible) {
@@ -115,23 +139,35 @@ export default function NotificationsModal({ visible, onClose }: Props) {
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
+        toValue: PANEL_HEIGHT,
         duration: 260,
         useNativeDriver: true,
       }).start();
     }
   }, [visible]);
 
+  // Mirrors website's handleNotificationClick — close modal, mark read, then navigate to the form
   const handleNotifPress = async (n: Notification) => {
     if (!n.read) await markAsRead(n.id);
-  };
+    onClose();
 
-  const handleMarkAllRead = async () => {
-    await markAllAsRead();
-  };
+    if (!n.project_id) return;
 
-  const handleClearAll = async () => {
-    await clearAll();
+    const project = projects.find(p => p.id === n.project_id);
+    const projectName = project?.name ?? '';
+
+    const screenName = formTypeToScreen(n.form_type);
+    if (screenName && n.form_id) {
+      navigation.navigate(screenName as any, {
+        projectId: n.project_id,
+        projectName,
+        initialFormId: n.form_id,
+      });
+    } else if (screenName) {
+      navigation.navigate(screenName as any, { projectId: n.project_id, projectName });
+    } else {
+      navigation.navigate('ProjectDashboard', { projectId: n.project_id, projectName });
+    }
   };
 
   return (
@@ -142,13 +178,21 @@ export default function NotificationsModal({ visible, onClose }: Props) {
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      {/* Backdrop */}
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+      {/*
+        Correct RN bottom-sheet pattern:
+        - container: flex:1 dimmed background, justifyContent:'flex-end'
+        - TouchableWithoutFeedback fills all space above the panel → tapping closes
+        - Animated panel at bottom (not absolute, no z-index issues)
+      */}
+      <View style={styles.container}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={styles.backdropArea} />
+        </TouchableWithoutFeedback>
 
-      {/* Panel */}
-      <Animated.View
-        style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}
-      >
+        {/* Panel */}
+        <Animated.View
+          style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}
+        >
         <SafeAreaView edges={['bottom']} style={{ flex: 1 }}>
           {/* Handle bar */}
           <View style={styles.handleBar} />
@@ -166,12 +210,12 @@ export default function NotificationsModal({ visible, onClose }: Props) {
             </View>
             <View style={styles.headerActions}>
               {unreadCount > 0 && (
-                <TouchableOpacity onPress={handleMarkAllRead} style={styles.actionBtn}>
+                <TouchableOpacity onPress={() => markAllAsRead()} style={styles.actionBtn}>
                   <Text style={styles.actionBtnText}>Mark read</Text>
                 </TouchableOpacity>
               )}
               {notifications.length > 0 && (
-                <TouchableOpacity onPress={handleClearAll} style={styles.actionBtn}>
+                <TouchableOpacity onPress={() => clearAll()} style={styles.actionBtn}>
                   <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>Clear</Text>
                 </TouchableOpacity>
               )}
@@ -208,22 +252,26 @@ export default function NotificationsModal({ visible, onClose }: Props) {
             />
           )}
         </SafeAreaView>
-      </Animated.View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
+  // Outer container — full screen, dimmed, panel at bottom
+  container: {
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  // Fills all space above the panel; tapping closes modal
+  backdropArea: {
+    flex: 1,
   },
   panel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.72,
+    height: PANEL_HEIGHT,
+    // No position: 'absolute' — sits naturally at the bottom of the flex container
     backgroundColor: '#121212',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,

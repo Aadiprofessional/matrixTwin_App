@@ -21,7 +21,9 @@ export interface SafetyEntry {
   location: string;
   inspection_type: string;
   findings: string;
+  incidents_reported?: string;
   corrective_actions: string;
+  notes?: string;
   risk_level: string;
   safety_score?: number;
   findings_count?: number;

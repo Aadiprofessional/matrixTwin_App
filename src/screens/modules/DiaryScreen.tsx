@@ -157,6 +157,16 @@ export default function DiaryScreen() {
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
+  // Deep-link: auto-open detail when navigated from a notification
+  const deepLinkedRef = React.useRef(false);
+  useEffect(() => {
+    const initialFormId = (route.params as any)?.initialFormId;
+    if (!initialFormId || deepLinkedRef.current || entries.length === 0) return;
+    const entry = entries.find(e => e.id === initialFormId);
+    if (entry) { deepLinkedRef.current = true; openDetail(entry); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   const openDetail = async (entry: FullEntry) => {
     setSelectedEntry(entry);
     setShowDetail(true);
@@ -1022,7 +1032,7 @@ export default function DiaryScreen() {
 
 const S = StyleSheet.create({
   listContent: { padding: 20, paddingBottom: 80 },
-  pageHeader: { marginBottom: 20 },
+  pageHeader: {},
   navActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   navActionBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1e2a10', alignItems: 'center', justifyContent: 'center' },
   navActionBtnSecondary: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' },

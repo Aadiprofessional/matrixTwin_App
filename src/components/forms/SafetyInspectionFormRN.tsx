@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, Modal, TouchableOpacity, ScrollView,
-  TextInput, StyleSheet, Switch,
+  TextInput, StyleSheet,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../theme/colors';
@@ -9,40 +9,45 @@ import { spacing, radius } from '../../theme/spacing';
 
 const ACCENT = '#f59e0b';
 
-const RISK_LEVELS = ['low', 'medium', 'high', 'critical'];
-const RISK_COLORS: Record<string, string> = {
-  low: '#22c55e', medium: '#f59e0b', high: '#f97316', critical: '#ef4444',
-};
-const INSPECTION_TYPES = ['Routine', 'Pre-Task', 'Post-Incident', 'Regulatory', 'Environmental', 'Fire Safety'];
+type ResponseStatus = 'Y' | 'N' | 'NA' | '';
 
-const CHECKLIST_SECTIONS = [
-  {
-    category: 'Personal Protective Equipment (PPE)',
-    items: ['Hard hat worn correctly', 'Safety vest / hi-vis worn', 'Safety boots worn', 'Gloves worn where required', 'Eye/ear protection worn'],
-  },
-  {
-    category: 'Work Area Safety',
-    items: ['Area is properly demarcated', 'No trip/slip hazards observed', 'Fire extinguisher accessible', 'Emergency exits clear', 'First aid kit accessible'],
-  },
-  {
-    category: 'Equipment & Tools',
-    items: ['Tools in good condition', 'Electrical tools inspected / tagged', 'Scaffolding erected correctly', 'Ladders secured correctly', 'Lifting equipment inspected'],
-  },
-  {
-    category: 'Housekeeping',
-    items: ['Work area clean and tidy', 'Waste disposed correctly', 'Materials stored safely', 'Spill kits available', 'Signage adequate'],
-  },
+interface ChecklistItem { id: string; description: string; }
+interface ChecklistCategory { id: string; description: string; items: ChecklistItem[]; }
+interface PhotoRecord { id: string; location: string; finding: string; action: string; }
+
+const DEFAULT_CATEGORIES: ChecklistCategory[] = [
+  { id: '1',  description: 'General',                          items: [{ id: '1.1', description: '' }] },
+  { id: '2',  description: 'Flammable Liquids/Gases',          items: [{ id: '2.1', description: '' }] },
+  { id: '3',  description: 'Hazardous Substances',             items: [{ id: '3.1', description: '' }] },
+  { id: '4',  description: 'Electricity',                      items: [{ id: '4.1', description: '' }] },
+  { id: '5',  description: 'Fire Precaution',                  items: [{ id: '5.1', description: '' }] },
+  { id: '6',  description: 'Working Area',                     items: [{ id: '6.1', description: '' }] },
+  { id: '7',  description: 'Lifting Operation',                items: [{ id: '7.1', description: '' }] },
+  { id: '8',  description: 'Material Hoist',                   items: [{ id: '8.1', description: '' }] },
+  { id: '9',  description: 'Confined Spaces',                  items: [{ id: '9.1', description: '' }] },
+  { id: '10', description: 'Noise',                            items: [{ id: '10.1', description: '' }] },
+  { id: '11', description: 'Gas Welding and Cutting Equipment', items: [{ id: '11.1', description: '' }] },
+  { id: '12', description: 'Electricity-arc Welding',          items: [{ id: '12.1', description: '' }] },
+  { id: '13', description: 'Mechanical Plant and Equipment',   items: [{ id: '13.1', description: '' }] },
+  { id: '14', description: 'Tunnel',                           items: [{ id: '14.1', description: '' }] },
+  { id: '15', description: 'Formwork',                         items: [{ id: '15.1', description: '' }] },
+  { id: '16', description: 'Hoarding',                         items: [{ id: '16.1', description: '' }] },
+  { id: '17', description: 'Working at Height',                items: [{ id: '17.1', description: '' }] },
+  { id: '18', description: 'Abrasive Wheels',                  items: [{ id: '18.1', description: '' }] },
+  { id: '19', description: 'Excavations',                      items: [{ id: '19.1', description: '' }] },
+  { id: '20', description: 'Slings and other Lifting Gears',   items: [{ id: '20.1', description: '' }] },
+  { id: '21', description: 'Compressed Air/Pneumatic Air Tools', items: [{ id: '21.1', description: '' }] },
+  { id: '22', description: 'Protection of the Public',         items: [{ id: '22.1', description: '' }] },
+  { id: '23', description: 'Prevention of Mosquito Breed',     items: [{ id: '23.1', description: '' }] },
+  { id: '24', description: 'Work Over Water',                  items: [{ id: '24.1', description: '' }] },
+  { id: '25', description: 'Welfare Facilities',               items: [{ id: '25.1', description: '' }] },
 ];
 
-type CheckStatus = 'pass' | 'fail' | 'na';
-
-interface ChecklistRow {
-  key: string;
-  status: CheckStatus;
-  remarks: string;
+interface ChecklistDateEntry {
+  agreedDate: string;
+  dateCompleted: string;
+  rectificationStatus: string;
 }
-
-function genId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`; }
 
 export interface SafetyFormData {
   formNumber: string;
@@ -50,17 +55,15 @@ export interface SafetyFormData {
   contractTitle: string;
   date: string;
   time: string;
-  location: string;
-  inspector: string;
-  inspectionType: string;
-  riskLevel: string;
-  findings: string;
-  correctiveActions: string;
-  notes: string;
-  checklist: ChecklistRow[];
-  incidentsReported: string;
-  score?: number;
+  recordName: string;
+  recordDate: string;
+  checklistItems: ChecklistCategory[];
+  responses: Record<string, Record<string, string>>;
+  checklistDates: Record<string, Record<string, ChecklistDateEntry>>;
+  photoRecords: PhotoRecord[];
 }
+
+function genFormNo() { return `SAFETY-${Date.now().toString().slice(-6)}`; }
 
 export default function SafetyInspectionFormRN({
   visible, onClose, onSave, initialData,
@@ -70,50 +73,94 @@ export default function SafetyInspectionFormRN({
   onSave: (data: SafetyFormData) => void;
   initialData?: Partial<SafetyFormData>;
 }) {
-  const totalPages = 3;
+  console.log('[SafetyInspectionFormRN] visible:', visible, 'has initialData:', !!initialData);
+  const totalPages = 4;
   const [page, setPage] = useState(1);
 
-  const defaultChecklist: ChecklistRow[] = CHECKLIST_SECTIONS.flatMap(s =>
-    s.items.map(item => ({ key: `${s.category}::${item}`, status: 'na' as CheckStatus, remarks: '' }))
-  );
-
   const [form, setForm] = useState<SafetyFormData>({
-    formNumber: initialData?.formNumber || `SAFETY-${Date.now().toString().slice(-6)}`,
-    contractNo: initialData?.contractNo || '',
+    formNumber:    initialData?.formNumber    || genFormNo(),
+    contractNo:    initialData?.contractNo    || '',
     contractTitle: initialData?.contractTitle || '',
-    date: initialData?.date || '',
-    time: initialData?.time || '',
-    location: initialData?.location || '',
-    inspector: initialData?.inspector || '',
-    inspectionType: initialData?.inspectionType || 'Routine',
-    riskLevel: initialData?.riskLevel || 'medium',
-    findings: initialData?.findings || '',
-    correctiveActions: initialData?.correctiveActions || '',
-    notes: initialData?.notes || '',
-    checklist: initialData?.checklist || defaultChecklist,
-    incidentsReported: initialData?.incidentsReported || '',
+    date:          initialData?.date          || '',
+    time:          initialData?.time          || '',
+    recordName:    initialData?.recordName    || '',
+    recordDate:    initialData?.recordDate    || '',
+    checklistItems: initialData?.checklistItems || DEFAULT_CATEGORIES,
+    responses:      initialData?.responses      || {},
+    checklistDates: initialData?.checklistDates  || {},
+    photoRecords:   initialData?.photoRecords   || [
+      { id: '1', location: '', finding: '', action: '' },
+      { id: '2', location: '', finding: '', action: '' },
+    ],
   });
 
-  const setField = (k: keyof SafetyFormData, v: any) => setForm(f => ({ ...f, [k]: v }));
+  const setF = (k: keyof SafetyFormData, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  const setChecklistRow = (idx: number, field: 'status' | 'remarks', val: any) => {
+  const setResponse = (catId: string, itemId: string, status: string) => {
+    setForm(f => ({
+      ...f,
+      responses: { ...f.responses, [catId]: { ...(f.responses[catId] || {}), [itemId]: status } },
+    }));
+  };
+
+  const setChecklistDate = (catId: string, itemId: string, field: keyof ChecklistDateEntry, value: string) => {
+    const emptyEntry: ChecklistDateEntry = { agreedDate: '', dateCompleted: '', rectificationStatus: '' };
+    setForm(f => ({
+      ...f,
+      checklistDates: {
+        ...f.checklistDates,
+        [catId]: {
+          ...(f.checklistDates[catId] || {}),
+          [itemId]: { ...emptyEntry, ...(f.checklistDates[catId]?.[itemId] || {}), [field]: value },
+        },
+      },
+    }));
+  };
+
+  const setItemDesc = (catId: string, itemId: string, desc: string) => {
+    setForm(f => ({
+      ...f,
+      checklistItems: f.checklistItems.map(cat =>
+        cat.id !== catId ? cat : {
+          ...cat,
+          items: cat.items.map(it => it.id === itemId ? { ...it, description: desc } : it),
+        }
+      ),
+    }));
+  };
+
+  const addItem = (catId: string) => {
+    setForm(f => ({
+      ...f,
+      checklistItems: f.checklistItems.map(cat => {
+        if (cat.id !== catId) return cat;
+        const last = cat.items[cat.items.length - 1];
+        const newId = `${catId}.${Number(last.id.split('.')[1]) + 1}`;
+        return { ...cat, items: [...cat.items, { id: newId, description: '' }] };
+      }),
+    }));
+  };
+
+  const setPhotoField = (idx: number, field: keyof PhotoRecord, value: string) => {
     setForm(f => {
-      const next = [...f.checklist];
-      next[idx] = { ...next[idx], [field]: val };
-      return { ...f, checklist: next };
+      const next = [...f.photoRecords];
+      next[idx] = { ...next[idx], [field]: value };
+      return { ...f, photoRecords: next };
     });
   };
 
-  const calcScore = () => {
-    const rows = form.checklist.filter(r => r.status !== 'na');
-    if (!rows.length) return 100;
-    const pass = rows.filter(r => r.status === 'pass').length;
-    return Math.round((pass / rows.length) * 100);
+  const addPhotoRecord = () => {
+    setForm(f => ({
+      ...f,
+      photoRecords: [...f.photoRecords, { id: String(f.photoRecords.length + 1), location: '', finding: '', action: '' }],
+    }));
   };
 
-  const handleSave = () => {
-    onSave({ ...form, score: calcScore() });
-  };
+  const STATUS_OPTIONS: ResponseStatus[] = ['Y', 'N', 'NA'];
+  const STATUS_COLORS: Record<string, string> = { 'Y': '#22c55e', 'N': '#ef4444', 'NA': '#64748b' };
+
+  const page2cats = form.checklistItems.slice(0, 12);
+  const page3cats = form.checklistItems.slice(12);
 
   if (!visible) return null;
 
@@ -121,155 +168,165 @@ export default function SafetyInspectionFormRN({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={S.overlay}>
         <View style={S.sheet}>
-          {/* Header */}
+
           <View style={S.header}>
-            <View>
-              <Text style={S.headerTitle}>Safety Inspection</Text>
-              <Text style={S.headerSub}>Page {page}/{totalPages}</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={S.closeBtn}>
+            <Text style={S.headerTitle}>Safety Inspection Checklist</Text>
+            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
               <Icon name="close" size={22} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          {/* Page tabs */}
+          <View style={S.actionBar}>
+            <TouchableOpacity style={S.cancelBtn} onPress={onClose}>
+              <Text style={S.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[S.saveBtn, { backgroundColor: ACCENT }]} onPress={() => onSave(form)}>
+              <Icon name="content-save" size={15} color="#fff" />
+              <Text style={S.saveBtnText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={S.tabRow}>
-            {['Details', 'Checklist', 'Summary'].map((t, i) => (
+            {['Header', 'Check 1–12', 'Check 13–25', 'Photos'].map((t, i) => (
               <TouchableOpacity key={t} style={[S.tab, page === i + 1 && { borderBottomColor: ACCENT, borderBottomWidth: 2 }]} onPress={() => setPage(i + 1)}>
                 <Text style={[S.tabText, page === i + 1 && { color: ACCENT }]}>{t}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <ScrollView style={S.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={S.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-            {/* PAGE 1: Details */}
             {page === 1 && (
               <View>
                 <Row label="Form Number">
-                  <TextInput style={S.input} value={form.formNumber} onChangeText={v => setField('formNumber', v)} />
+                  <TextInput style={S.input} value={form.formNumber} onChangeText={v => setF('formNumber', v)} />
                 </Row>
                 <Row label="Contract No.">
-                  <TextInput style={S.input} value={form.contractNo} onChangeText={v => setField('contractNo', v)} placeholder="e.g. CT-2024-001" placeholderTextColor={colors.textMuted} />
+                  <TextInput style={S.input} value={form.contractNo} onChangeText={v => setF('contractNo', v)} placeholder="e.g. CT-2024-001" placeholderTextColor={colors.textMuted} />
                 </Row>
                 <Row label="Contract Title">
-                  <TextInput style={S.input} value={form.contractTitle} onChangeText={v => setField('contractTitle', v)} placeholder="Contract / project title" placeholderTextColor={colors.textMuted} />
+                  <TextInput style={S.input} value={form.contractTitle} onChangeText={v => setF('contractTitle', v)} placeholder="Contract / project title" placeholderTextColor={colors.textMuted} />
                 </Row>
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                   <View style={{ flex: 1 }}>
                     <Row label="Date">
-                      <TextInput style={S.input} value={form.date} onChangeText={v => setField('date', v)} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} />
+                      <TextInput style={S.input} value={form.date} onChangeText={v => setF('date', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
                     </Row>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Row label="Time">
-                      <TextInput style={S.input} value={form.time} onChangeText={v => setField('time', v)} placeholder="HH:MM" placeholderTextColor={colors.textMuted} />
+                      <TextInput style={S.input} value={form.time} onChangeText={v => setF('time', v)} placeholder="HH:MM" placeholderTextColor={colors.textMuted} />
                     </Row>
                   </View>
                 </View>
-                <Row label="Inspector *">
-                  <TextInput style={S.input} value={form.inspector} onChangeText={v => setField('inspector', v)} placeholder="Inspector name" placeholderTextColor={colors.textMuted} />
-                </Row>
-                <Row label="Location *">
-                  <TextInput style={S.input} value={form.location} onChangeText={v => setField('location', v)} placeholder="Inspection location" placeholderTextColor={colors.textMuted} />
-                </Row>
-                <Row label="Inspection Type">
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={S.chipRow}>
-                      {INSPECTION_TYPES.map(t => (
-                        <TouchableOpacity key={t} style={[S.chip, form.inspectionType === t && { backgroundColor: ACCENT, borderColor: ACCENT }]} onPress={() => setField('inspectionType', t)}>
-                          <Text style={[S.chipText, form.inspectionType === t && { color: '#fff' }]}>{t}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </Row>
-                <Row label="Risk Level">
-                  <View style={S.chipRow}>
-                    {RISK_LEVELS.map(r => (
-                      <TouchableOpacity key={r} style={[S.chip, form.riskLevel === r && { backgroundColor: RISK_COLORS[r], borderColor: RISK_COLORS[r] }]} onPress={() => setField('riskLevel', r)}>
-                        <Text style={[S.chipText, form.riskLevel === r && { color: '#fff' }]}>{r.toUpperCase()}</Text>
-                      </TouchableOpacity>
-                    ))}
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Row label="Record Name">
+                      <TextInput style={S.input} value={form.recordName} onChangeText={v => setF('recordName', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+                    </Row>
                   </View>
-                </Row>
+                  <View style={{ flex: 1 }}>
+                    <Row label="Record Date">
+                      <TextInput style={S.input} value={form.recordDate} onChangeText={v => setF('recordDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+                    </Row>
+                  </View>
+                </View>
               </View>
             )}
 
-            {/* PAGE 2: Checklist */}
-            {page === 2 && (
+            {(page === 2 || page === 3) && (
               <View>
-                {CHECKLIST_SECTIONS.map((section, sIdx) => (
-                  <View key={section.category} style={S.section}>
-                    <Text style={S.sectionTitle}>{section.category}</Text>
-                    {section.items.map((item, iIdx) => {
-                      const globalIdx = CHECKLIST_SECTIONS.slice(0, sIdx).reduce((a, s) => a + s.items.length, 0) + iIdx;
-                      const row = form.checklist[globalIdx];
+                {(page === 2 ? page2cats : page3cats).map(cat => (
+                  <View key={cat.id} style={S.catBlock}>
+                    <Text style={S.catTitle}>{cat.id}. {cat.description}</Text>
+                    {cat.items.map(item => {
+                      const resp = (form.responses[cat.id] || {})[item.id] || '';
+                      const dates = (form.checklistDates[cat.id] || {})[item.id] || { agreedDate: '', dateCompleted: '', rectificationStatus: '' };
                       return (
-                        <View key={item} style={S.checkRow}>
-                          <Text style={S.checkItem}>{item}</Text>
-                          <View style={S.checkBtns}>
-                            {(['pass', 'fail', 'na'] as CheckStatus[]).map(s => (
-                              <TouchableOpacity
-                                key={s}
-                                style={[S.checkBtn, row?.status === s && { backgroundColor: s === 'pass' ? '#22c55e22' : s === 'fail' ? '#ef444422' : '#64748b22', borderColor: s === 'pass' ? '#22c55e' : s === 'fail' ? '#ef4444' : '#64748b' }]}
-                                onPress={() => setChecklistRow(globalIdx, 'status', s)}
-                              >
-                                <Text style={[S.checkBtnText, { color: s === 'pass' ? '#22c55e' : s === 'fail' ? '#ef4444' : '#64748b' }]}>
-                                  {s === 'pass' ? '✓' : s === 'fail' ? '✗' : 'N/A'}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                          {row?.status === 'fail' && (
+                        <View key={item.id} style={S.itemBlock}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 6 }}>
+                            <Text style={S.itemId}>{item.id}</Text>
                             <TextInput
-                              style={[S.input, { marginTop: 4, fontSize: 12 }]}
-                              value={row.remarks}
-                              onChangeText={v => setChecklistRow(globalIdx, 'remarks', v)}
-                              placeholder="Remarks..."
+                              style={[S.input, { flex: 1, fontSize: 12 }]}
+                              value={item.description}
+                              onChangeText={v => setItemDesc(cat.id, item.id, v)}
+                              placeholder="Insert item"
                               placeholderTextColor={colors.textMuted}
                             />
+                          </View>
+                          <View style={S.statusRow}>
+                            {STATUS_OPTIONS.map(s => {
+                              const active = resp === s;
+                              return (
+                                <TouchableOpacity
+                                  key={s}
+                                  style={[S.statusBtn, active && { backgroundColor: STATUS_COLORS[s] + '22', borderColor: STATUS_COLORS[s] }]}
+                                  onPress={() => setResponse(cat.id, item.id, active ? '' : s)}
+                                >
+                                  <Text style={[S.statusBtnText, { color: active ? STATUS_COLORS[s] : colors.textMuted }]}>{s}</Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                          {resp === 'N' && (
+                            <View style={S.datesBlock}>
+                              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={S.dateLabel}>Agreed date for completion</Text>
+                                  <TextInput style={S.dateInput} value={dates.agreedDate} onChangeText={v => setChecklistDate(cat.id, item.id, 'agreedDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={S.dateLabel}>Date completed</Text>
+                                  <TextInput style={S.dateInput} value={dates.dateCompleted} onChangeText={v => setChecklistDate(cat.id, item.id, 'dateCompleted', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+                                </View>
+                              </View>
+                              <Text style={S.dateLabel}>Rectification Status</Text>
+                              <TextInput style={S.dateInput} value={dates.rectificationStatus} onChangeText={v => setChecklistDate(cat.id, item.id, 'rectificationStatus', v)} placeholder="e.g. In Progress / Completed" placeholderTextColor={colors.textMuted} />
+                            </View>
                           )}
                         </View>
                       );
                     })}
+                    <TouchableOpacity style={S.addItemBtn} onPress={() => addItem(cat.id)}>
+                      <Icon name="plus" size={14} color={ACCENT} />
+                      <Text style={S.addItemText}>Add item</Text>
+                    </TouchableOpacity>
                   </View>
                 ))}
               </View>
             )}
 
-            {/* PAGE 3: Summary */}
-            {page === 3 && (
+            {page === 4 && (
               <View>
-                <View style={S.scoreBox}>
-                  <Text style={S.scoreLabel}>Safety Score</Text>
-                  <Text style={[S.scoreValue, { color: calcScore() >= 80 ? '#22c55e' : calcScore() >= 60 ? ACCENT : '#ef4444' }]}>
-                    {calcScore()}%
-                  </Text>
-                </View>
-                <Row label="Findings / Observations *">
-                  <TextInput style={[S.input, S.ta]} value={form.findings} onChangeText={v => setField('findings', v)} placeholder="Describe findings..." placeholderTextColor={colors.textMuted} multiline numberOfLines={3} />
-                </Row>
-                <Row label="Corrective Actions">
-                  <TextInput style={[S.input, S.ta]} value={form.correctiveActions} onChangeText={v => setField('correctiveActions', v)} placeholder="Required corrective actions..." placeholderTextColor={colors.textMuted} multiline numberOfLines={3} />
-                </Row>
-                <Row label="Incidents Reported">
-                  <TextInput style={S.input} value={form.incidentsReported} onChangeText={v => setField('incidentsReported', v)} placeholder="Any incidents reported? (none if blank)" placeholderTextColor={colors.textMuted} />
-                </Row>
-                <Row label="Notes">
-                  <TextInput style={[S.input, S.ta]} value={form.notes} onChangeText={v => setField('notes', v)} placeholder="Additional notes..." placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
-                </Row>
+                <Text style={S.sectionTitle}>Environmental Photo Records</Text>
+                {form.photoRecords.map((rec, idx) => (
+                  <View key={rec.id} style={S.photoCard}>
+                    <Text style={S.photoCardTitle}>Record {idx + 1}</Text>
+                    <Row label="Location">
+                      <TextInput style={S.input} value={rec.location} onChangeText={v => setPhotoField(idx, 'location', v)} placeholder="Location" placeholderTextColor={colors.textMuted} />
+                    </Row>
+                    <Row label="Finding">
+                      <TextInput style={[S.input, S.ta]} value={rec.finding} onChangeText={v => setPhotoField(idx, 'finding', v)} placeholder="Finding / observation" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
+                    </Row>
+                    <Row label="Action">
+                      <TextInput style={[S.input, S.ta]} value={rec.action} onChangeText={v => setPhotoField(idx, 'action', v)} placeholder="Action required" placeholderTextColor={colors.textMuted} multiline numberOfLines={2} />
+                    </Row>
+                  </View>
+                ))}
+                <TouchableOpacity style={S.addPhotoBtn} onPress={addPhotoRecord}>
+                  <Icon name="plus" size={16} color={ACCENT} />
+                  <Text style={S.addPhotoBtnText}>Add Photo Record</Text>
+                </TouchableOpacity>
               </View>
             )}
 
-            <View style={{ height: 30 }} />
+            <View style={{ height: 40 }} />
           </ScrollView>
 
-          {/* Footer */}
           <View style={S.footer}>
             <TouchableOpacity style={S.footerNav} onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-              <Icon name="arrow-left" size={18} color={page === 1 ? '#444' : colors.textMuted} />
-              <Text style={{ color: page === 1 ? '#444' : colors.textMuted, fontSize: 13 }}>Back</Text>
+              <Icon name="arrow-left" size={18} color={page === 1 ? '#333' : colors.textMuted} />
+              <Text style={{ color: page === 1 ? '#333' : colors.textMuted, fontSize: 13 }}>Back</Text>
             </TouchableOpacity>
             {page < totalPages ? (
               <TouchableOpacity style={[S.footerBtn, { backgroundColor: ACCENT }]} onPress={() => setPage(p => p + 1)}>
@@ -277,9 +334,9 @@ export default function SafetyInspectionFormRN({
                 <Icon name="arrow-right" size={16} color="#fff" />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={[S.footerBtn, { backgroundColor: ACCENT }]} onPress={handleSave}>
+              <TouchableOpacity style={[S.footerBtn, { backgroundColor: ACCENT }]} onPress={() => onSave(form)}>
                 <Icon name="check" size={16} color="#fff" />
-                <Text style={S.footerBtnText}>Continue</Text>
+                <Text style={S.footerBtnText}>Continue to Process Flow</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -291,39 +348,46 @@ export default function SafetyInspectionFormRN({
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <View style={{ marginBottom: spacing.md }}>
-      <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 5 }}>{label}</Text>
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{label}</Text>
       {children}
     </View>
   );
 }
 
 const S = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '95%', overflow: 'hidden' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  headerSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  closeBtn: { padding: 6 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '96%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  actionBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  cancelBtn: { paddingHorizontal: spacing.md, paddingVertical: 7, backgroundColor: '#1a1a1a', borderRadius: radius.md, borderWidth: 1, borderColor: '#333' },
+  cancelBtnText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.md },
+  saveBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   tabRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  tab: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
+  tab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabText: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
   body: { flex: 1, padding: spacing.md },
-  section: { marginBottom: spacing.lg },
   sectionTitle: { color: ACCENT, fontSize: 12, fontWeight: '800', letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
-  checkRow: { backgroundColor: '#111', borderRadius: radius.md, borderWidth: 1, borderColor: '#222', padding: spacing.sm, marginBottom: spacing.xs },
-  checkItem: { color: colors.text, fontSize: 13, marginBottom: 6 },
-  checkBtns: { flexDirection: 'row', gap: spacing.xs },
-  checkBtn: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1, borderColor: '#333', backgroundColor: '#0d0d0d' },
-  checkBtnText: { fontSize: 12, fontWeight: '700' },
-  scoreBox: { backgroundColor: '#111', borderRadius: radius.lg, borderWidth: 1, borderColor: '#222', padding: spacing.lg, alignItems: 'center', marginBottom: spacing.lg },
-  scoreLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 8 },
-  scoreValue: { fontSize: 48, fontWeight: '900' },
-  input: { backgroundColor: '#111', color: colors.text, borderRadius: radius.md, borderWidth: 1, borderColor: '#222', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14 },
-  ta: { minHeight: 80, textAlignVertical: 'top', paddingTop: spacing.sm },
-  chipRow: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },
-  chip: { borderRadius: radius.full, borderWidth: 1, borderColor: '#333', paddingHorizontal: spacing.md, paddingVertical: 6 },
-  chipText: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  catBlock: { marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: '#1a1a1a', paddingBottom: spacing.sm },
+  catTitle: { color: colors.text, fontWeight: '800', fontSize: 13, marginBottom: spacing.sm },
+  itemBlock: { backgroundColor: '#0d0d0d', borderRadius: radius.md, borderWidth: 1, borderColor: '#1e1e1e', padding: spacing.sm, marginBottom: spacing.xs },
+  itemId: { color: colors.textMuted, fontSize: 11, width: 30 },
+  statusRow: { flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
+  statusBtn: { borderRadius: radius.sm, borderWidth: 1, borderColor: '#333', paddingHorizontal: 8, paddingVertical: 4 },
+  statusBtnText: { fontSize: 10, fontWeight: '700' },
+  datesBlock: { marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#1e1e1e' },
+  dateLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700', marginBottom: 3 },
+  dateInput: { backgroundColor: '#0a0a0a', color: colors.text, borderRadius: radius.sm, borderWidth: 1, borderColor: '#222', paddingHorizontal: 6, paddingVertical: 5, fontSize: 11, marginBottom: 4 },
+  addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  addItemText: { color: ACCENT, fontSize: 12, fontWeight: '600' },
+  photoCard: { backgroundColor: '#0d0d0d', borderRadius: radius.lg, borderWidth: 1, borderColor: '#1e1e1e', padding: spacing.md, marginBottom: spacing.md },
+  photoCardTitle: { color: ACCENT, fontWeight: '800', fontSize: 12, marginBottom: spacing.sm },
+  addPhotoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', backgroundColor: '#111', borderRadius: radius.md, borderWidth: 1, borderColor: '#333', padding: spacing.sm },
+  addPhotoBtnText: { color: ACCENT, fontWeight: '700', fontSize: 13 },
+  input: { backgroundColor: '#111', color: colors.text, borderRadius: radius.md, borderWidth: 1, borderColor: '#222', paddingHorizontal: spacing.sm, paddingVertical: 7, fontSize: 13 },
+  ta: { minHeight: 60, textAlignVertical: 'top', paddingTop: spacing.sm },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderTopWidth: 1, borderTopColor: '#1a1a1a' },
   footerNav: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.sm },
   footerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.lg },

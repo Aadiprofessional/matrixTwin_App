@@ -122,9 +122,15 @@ const LC = StyleSheet.create({
 interface WorkflowNode { id: string; node_order: number; node_name: string; executor_id?: string; executor_name?: string; status: string; }
 interface Comment { id: string; user_name: string; comment: string; action?: string; created_at: string; }
 interface FullEntry {
-  id: string; form_number?: string; date: string; supervisor: string; trade: string;
+  id: string; form_number?: string; date: string; project?: string; name?: string;
+  // RN field names
+  supervisor: string; trade: string;
   workers_count: number; hours_worked: number; tasks_completed: string; notes?: string;
-  status: string; created_at: string; project_id?: string; name?: string; expires_at?: string;
+  // Web field name aliases
+  submitter?: string; labour_type?: string;
+  worker_count?: number; trade_type?: string;
+  work_description?: string;
+  status: string; created_at: string; project_id?: string; expires_at?: string;
   labour_workflow_nodes?: WorkflowNode[]; labour_comments?: Comment[];
   current_node_index?: number; form_data?: any;
 }
@@ -185,6 +191,16 @@ export default function LabourScreen() {
   }, [user, projectId]);
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
+
+  // Deep-link: auto-open detail when navigated from a notification
+  const deepLinkedRef = React.useRef(false);
+  useEffect(() => {
+    const initialFormId = (route.params as any)?.initialFormId;
+    if (!initialFormId || deepLinkedRef.current || entries.length === 0) return;
+    const entry = entries.find(e => e.id === initialFormId);
+    if (entry) { deepLinkedRef.current = true; openDetail(entry); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   const loadMembers = async () => {
     setMembersLoading(true);
@@ -355,65 +371,65 @@ export default function LabourScreen() {
         </View>
       </View>
 
-      <View style={S.pageHeader}>
-        <Text style={S.pageDesc}>
-          Monitor workforce attendance and labor activities with detailed tracking and approval workflows.
-        </Text>
-
-        <View style={S.searchRow}>
-          <View style={S.searchInputWrap}>
-            <Icon name="magnify" size={18} color="#666" />
-            <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={searchQuery} onChangeText={setSearchQuery} />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Icon name="close-circle" size={16} color="#555" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={S.sortBtn}
-            onPress={() => {}}
-          >
-            <Icon
-              name="sort-calendar-descending"
-              size={20}
-              color={ACCENT}
-            />
-          </TouchableOpacity>
-        </View>
-
-
-      <View style={S.tabsRow}>
-        {([
-          { key: 'all',       icon: 'view-list-outline',   count: total,     label: 'All'  },
-          { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
-          { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
-          { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
-        ] as const).map(({ key, icon, count, label }) => {
-          const active = filterStatus === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setFilterStatus(key)}
-              style={[S.tab, active && S.tabActive]}
-            >
-              <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
-              <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
-              <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      
-      <Text style={S.shownText}>{filtered.length} shown</Text>
-      </View>
-
       {loading ? <ActivityIndicator color={ACCENT} style={{ flex:1, marginTop:40 }} /> : (
         <FlatList data={filtered} keyExtractor={i => i.id}
-          ListHeaderComponent={() => <View style={{ height: 0 }} />}
           contentContainerStyle={S.listContent}
+          ListHeaderComponent={() => (
+            <View style={S.pageHeader}>
+              <Text style={S.pageDesc}>
+                Monitor workforce attendance and labor activities with detailed tracking and approval workflows.
+              </Text>
+
+              <View style={S.searchRow}>
+                <View style={S.searchInputWrap}>
+                  <Icon name="magnify" size={18} color="#666" />
+                  <TextInput style={S.searchInput} placeholder="Search entries…" placeholderTextColor="#555" value={searchQuery} onChangeText={setSearchQuery} />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Icon name="close-circle" size={16} color="#555" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={S.sortBtn}
+                  onPress={() => {}}
+                >
+                  <Icon
+                    name="sort-calendar-descending"
+                    size={20}
+                    color={ACCENT}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={S.tabsRow}>
+                {([
+                  { key: 'all',       icon: 'view-list-outline',   count: total,     label: 'All'  },
+                  { key: 'pending',   icon: 'clock-outline',        count: pending,   label: 'Pending' },
+                  { key: 'completed', icon: 'check-circle-outline', count: completed, label: 'Done' },
+                  { key: 'rejected',  icon: 'close-circle-outline', count: entries.filter(e => e.status === 'rejected' || e.status === 'permanently_rejected').length,  label: 'Rejected' },
+                ] as const).map(({ key, icon, count, label }) => {
+                  const active = filterStatus === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setFilterStatus(key)}
+                      style={[S.tab, active && S.tabActive]}
+                    >
+                      <Icon name={icon} size={15} color={active ? ACCENT : '#666'} />
+                      <Text style={[S.tabText, active && S.tabTextActive]}>{count}</Text>
+                      <Text style={[S.tabLabel, active && S.tabLabelActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              
+              <Text style={S.shownText}>{filtered.length} shown</Text>
+            </View>
+          )}
           renderItem={({ item }) => (
-            <FormEntryCard
+            <View style={S.listItem}>
+              <FormEntryCard
               date={dayjs(item.date || item.created_at).format('YYYY-MM-DD')}
               title={item.name || item.form_number || `Labour-${(item.id || '').slice(-6)}`}
               status={item.status}
@@ -446,6 +462,7 @@ export default function LabourScreen() {
                 ]}
               />
             </FormEntryCard>
+            </View>
           )}
           ListEmptyComponent={
             <View style={S.empty}>
@@ -460,20 +477,34 @@ export default function LabourScreen() {
       <ModuleDetailModal
         visible={showDetail && !!selectedEntry}
         onClose={() => setShowDetail(false)}
-        title={selectedEntry?.name || selectedEntry?.form_number || 'Labour Log Details'}
+        title={`Labour Return - ${selectedEntry ? dayjs(selectedEntry.date).format('DD MMM YYYY') : ''}`}
         accentColor={ACCENT}
         loading={loadingDetail}
         status={selectedEntry?.status}
+        completionText={selectedEntry ? (() => {
+          const nodes = selectedEntry.labour_workflow_nodes || [];
+          const currentNode = (nodes as any[]).find((n: any) => n.node_order === (selectedEntry.current_node_index || 0));
+          if (currentNode && selectedEntry.status === 'pending') {
+            const count = currentNode.completion_count || 0;
+            const max = currentNode.max_completions || 2;
+            return `Completions (${count}/${max})`;
+          }
+          return undefined;
+        })() : undefined}
         metrics={selectedEntry ? [
-          { label: 'Workers', value: String(selectedEntry.workers_count ?? '—'), color: ACCENT },
+          { label: 'Workers', value: String(selectedEntry.worker_count ?? selectedEntry.workers_count ?? '—'), color: ACCENT },
           { label: 'Hours', value: String(selectedEntry.hours_worked ?? '—') },
-          { label: 'Trade', value: selectedEntry.trade || '—' },
+          { label: 'Labour Type', value: selectedEntry.labour_type || selectedEntry.trade || '—' },
         ] : []}
         fields={selectedEntry ? [
-          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY') },
-          { label: 'Supervisor', value: selectedEntry.supervisor },
-          { label: 'Tasks Completed', value: selectedEntry.tasks_completed },
-          { label: 'Notes', value: selectedEntry.notes },
+          { label: 'Submitter', value: selectedEntry.submitter || selectedEntry.supervisor, icon: 'account-outline', half: true },
+          { label: 'Date', value: dayjs(selectedEntry.date).format('DD MMM YYYY'), icon: 'calendar-outline', half: true },
+          { label: 'Worker Count', value: (selectedEntry.worker_count ?? selectedEntry.workers_count) != null ? String(selectedEntry.worker_count ?? selectedEntry.workers_count) : undefined, icon: 'account-group-outline', half: true },
+          { label: 'Hours Worked', value: selectedEntry.hours_worked != null ? String(selectedEntry.hours_worked) : undefined, icon: 'clock-outline', half: true },
+          { label: 'Trade Type', value: selectedEntry.trade_type || selectedEntry.trade, icon: 'tools', half: true },
+          { label: 'Labour Type', value: selectedEntry.labour_type || selectedEntry.trade, icon: 'hammer-wrench', half: true },
+          { label: 'Work Description', value: selectedEntry.work_description || selectedEntry.tasks_completed, icon: 'clipboard-text-outline' },
+          { label: 'Notes', value: selectedEntry.notes, icon: 'file-document-outline' },
         ] : []}
         workflowNodes={(selectedEntry?.labour_workflow_nodes || []) as any}
         currentNodeIndex={selectedEntry?.current_node_index || 0}
@@ -485,10 +516,13 @@ export default function LabourScreen() {
         onApprove={() => handleWorkflowAction('approve')}
         onSendBack={() => handleWorkflowAction('back')}
         onReject={() => handleWorkflowAction('reject')}
+        approveLabel={(selectedEntry?.current_node_index === 1) ? 'Complete' : 'Approve'}
         canEditForm={isAdmin || selectedEntry?.status === 'rejected'}
         onEditForm={() => { setShowDetail(false); setShowFormView(true); }}
         onDelete={() => { setShowDetail(false); selectedEntry && handleDelete(selectedEntry); }}
         onHistory={() => { setShowDetail(false); selectedEntry && openHistory(selectedEntry); }}
+        onExport={() => {}}
+        onPrint={() => {}}
       />
 
       {/* Edit / View Form Modal */}
@@ -584,8 +618,9 @@ const S = StyleSheet.create({
   headerSub: { color: colors.textMuted, fontSize: 12 },
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   newBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  listContent: { padding: 20, paddingBottom: 80 },
-  pageHeader: { marginBottom: 20, paddingHorizontal: 20 },
+  listContent: { paddingBottom: 80 },
+  listItem: { marginVertical: 8, marginHorizontal: 20 },
+  pageHeader: { paddingHorizontal: 20 },
   pageDesc: { fontSize: 13, color: '#888', marginBottom: 14, lineHeight: 19 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 10, height: 42 },

@@ -11,9 +11,13 @@ export interface LabourEntry {
   id: string;
   form_number?: string;
   formNumber?: string;
+  form_no?: string;
+  formNo?: string;
   date: string;
   project_id?: string;
   project?: string;
+  name?: string;
+  // RN field names
   supervisor: string;
   supervisor_id?: string;
   trade: string;
@@ -21,6 +25,12 @@ export interface LabourEntry {
   hours_worked: number;
   tasks_completed: string;
   notes: string;
+  // Web field name aliases (same data, different keys)
+  submitter?: string;
+  worker_count?: number;
+  trade_type?: string;
+  work_description?: string;
+  labour_type?: string;
   status: string;
   labour_data?: LabourRow[];
   current_node_index?: number;
@@ -32,6 +42,7 @@ export interface LabourEntry {
   created_at: string;
   updated_at?: string;
   expires_at?: string;
+  expiresAt?: string;
   active?: boolean;
 }
 

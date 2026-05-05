@@ -24,6 +24,7 @@ import { getCompany } from '../../api/company';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useProjectStore } from '../../store/projectStore';
 import NotificationsModal from '../../components/ui/NotificationsModal';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
@@ -102,6 +103,7 @@ export default function ProjectsScreen() {
   const navigation = useNavigation<Nav>();
   const { user, logout } = useAuthStore();
   const { unreadCount, startPolling, stopPolling } = useNotificationStore();
+  const { setProjects: setStoreProjects } = useProjectStore();
   const [showNotifications, setShowNotifications] = useState(false);
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -123,7 +125,10 @@ export default function ProjectsScreen() {
   const fetchProjects = async () => {
     try {
       const data = await getProjects();
-      if (Array.isArray(data)) setProjects(data);
+      if (Array.isArray(data)) {
+        setProjects(data);
+        setStoreProjects(data); // populate global store for notification deep-links
+      }
     } catch (err: any) {
       if (!err?.message?.includes('Admin user is not assigned')) {
         console.error('Error fetching projects:', err);

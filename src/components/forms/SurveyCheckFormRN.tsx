@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, StyleSheet, Switch } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../theme/colors';
 import { spacing, radius } from '../../theme/spacing';
 
 const ACCENT = '#7c3aed';
-const WORKS_CATEGORIES = ['General', 'Survey', 'Measurement', 'Setting Out', 'Level Check', 'As-Built'];
+const WORKS_CATEGORIES = [
+  'General', 'Site Clearance', 'Landscape Softworks and Establishment Works',
+  'Fencing', 'Drainage Works', 'Earthworks', 'Geotechnical Works',
+];
 
 export interface SurveyFormData {
   contractNo: string;
   riscNo: string;
   revision: string;
-  supervisor: string;
   attention: string;
   location: string;
   survey: string;
-  surveyField: string;
   worksCategory: string;
   inspectionDate: string;
   inspectionTime: string;
@@ -23,15 +24,27 @@ export interface SurveyFormData {
   scheduledDate: string;
   scheduledTime: string;
   equipment: string;
-  issuedBy: string;
+  issueTime: string;
   issueDate: string;
-  receivedBy: string;
+  issuedBy: string;
+  receivedTime: string;
   receivedDate: string;
-  surveyedBy: string;
+  receivedBy: string;
+  siteAgentAttention: string;
   surveyedAt: string;
+  surveyedBy: string;
   noObjection: boolean;
   deficienciesNoted: boolean;
   deficiencies: string[];
+  formReturnedTime: string;
+  formReturnedDate: string;
+  formReturnedBy: string;
+  counterSignedTime: string;
+  counterSignedDate: string;
+  counterSignedBy: string;
+  formReceivedTime: string;
+  formReceivedDate: string;
+  formReceivedBy: string;
   project: string;
 }
 
@@ -45,18 +58,15 @@ export default function SurveyCheckFormRN({
   onSave: (data: SurveyFormData) => void;
   initialData?: Partial<SurveyFormData>;
 }) {
-  const totalPages = 3;
-  const [page, setPage] = useState(1);
+  console.log('[SurveyCheckFormRN] rendered, visible:', visible, 'initialData keys:', initialData ? Object.keys(initialData) : 'none');
 
   const [form, setForm] = useState<SurveyFormData>({
     contractNo: initialData?.contractNo || '',
     riscNo: initialData?.riscNo || genRiscNo(),
-    revision: initialData?.revision || 'Rev-1',
-    supervisor: initialData?.supervisor || '',
+    revision: initialData?.revision || '',
     attention: initialData?.attention || '',
     location: initialData?.location || '',
     survey: initialData?.survey || '',
-    surveyField: initialData?.surveyField || '',
     worksCategory: initialData?.worksCategory || 'General',
     inspectionDate: initialData?.inspectionDate || '',
     inspectionTime: initialData?.inspectionTime || '',
@@ -64,19 +74,40 @@ export default function SurveyCheckFormRN({
     scheduledDate: initialData?.scheduledDate || '',
     scheduledTime: initialData?.scheduledTime || '',
     equipment: initialData?.equipment || '',
-    issuedBy: initialData?.issuedBy || '',
+    issueTime: initialData?.issueTime || '',
     issueDate: initialData?.issueDate || '',
-    receivedBy: initialData?.receivedBy || '',
+    issuedBy: initialData?.issuedBy || '',
+    receivedTime: initialData?.receivedTime || '',
     receivedDate: initialData?.receivedDate || '',
-    surveyedBy: initialData?.surveyedBy || '',
+    receivedBy: initialData?.receivedBy || '',
+    siteAgentAttention: initialData?.siteAgentAttention || '',
     surveyedAt: initialData?.surveyedAt || '',
+    surveyedBy: initialData?.surveyedBy || '',
     noObjection: initialData?.noObjection || false,
     deficienciesNoted: initialData?.deficienciesNoted || false,
-    deficiencies: initialData?.deficiencies || ['', '', '', ''],
+    deficiencies: initialData?.deficiencies || ['', '', '', '', '', '', ''],
+    formReturnedTime: initialData?.formReturnedTime || '',
+    formReturnedDate: initialData?.formReturnedDate || '',
+    formReturnedBy: initialData?.formReturnedBy || '',
+    counterSignedTime: initialData?.counterSignedTime || '',
+    counterSignedDate: initialData?.counterSignedDate || '',
+    counterSignedBy: initialData?.counterSignedBy || '',
+    formReceivedTime: initialData?.formReceivedTime || '',
+    formReceivedDate: initialData?.formReceivedDate || '',
+    formReceivedBy: initialData?.formReceivedBy || '',
     project: initialData?.project || '',
   });
 
   const set = (k: keyof SurveyFormData, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleDeficiencyChange = (index: number, value: string) => {
+    const next = [...form.deficiencies];
+    next[index] = value;
+    set('deficiencies', next);
+    if (index === form.deficiencies.length - 1 && value.trim() !== '') {
+      set('deficiencies', [...next, '']);
+    }
+  };
 
   if (!visible) return null;
 
@@ -84,213 +115,239 @@ export default function SurveyCheckFormRN({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={S.overlay}>
         <View style={S.sheet}>
+
           <View style={S.header}>
-            <View>
-              <Text style={S.headerTitle}>Survey Check Form</Text>
-              <Text style={S.headerSub}>Page {page}/{totalPages}</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+            <Text style={S.headerTitle}>Survey Form</Text>
+            <TouchableOpacity onPress={onClose} style={S.closeBtn}>
               <Icon name="close" size={22} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          <View style={S.tabRow}>
-            {['Request', 'Survey', 'Outcome'].map((t, i) => (
-              <TouchableOpacity key={t} style={[S.tab, page === i + 1 && { borderBottomColor: ACCENT, borderBottomWidth: 2 }]} onPress={() => setPage(i + 1)}>
-                <Text style={[S.tabText, page === i + 1 && { color: ACCENT }]}>{t}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <ScrollView style={S.body} showsVerticalScrollIndicator={false}>
-
-            {page === 1 && (
-              <View>
-                <TRow label="RISC No.">
-                  <TextInput style={S.input} value={form.riscNo} onChangeText={v => set('riscNo', v)} />
-                </TRow>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Contract No.">
-                      <TextInput style={S.input} value={form.contractNo} onChangeText={v => set('contractNo', v)} placeholder="e.g. CT-001" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Revision">
-                      <TextInput style={S.input} value={form.revision} onChangeText={v => set('revision', v)} placeholder="Rev-1" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                </View>
-                <TRow label="Supervisor">
-                  <TextInput style={S.input} value={form.supervisor} onChangeText={v => set('supervisor', v)} placeholder="Supervisor name" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Attention To">
-                  <TextInput style={S.input} value={form.attention} onChangeText={v => set('attention', v)} placeholder="Attention to" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Location *">
-                  <TextInput style={S.input} value={form.location} onChangeText={v => set('location', v)} placeholder="Site location" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Survey / Works Description *">
-                  <TextInput style={[S.input, S.ta]} value={form.survey} onChangeText={v => set('survey', v)} placeholder="Describe survey works..." placeholderTextColor={colors.textMuted} multiline numberOfLines={3} />
-                </TRow>
-                <TRow label="Survey Field">
-                  <TextInput style={S.input} value={form.surveyField} onChangeText={v => set('surveyField', v)} placeholder="Survey field reference" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Works Category">
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={S.chipRow}>
-                      {WORKS_CATEGORIES.map(c => (
-                        <TouchableOpacity key={c} style={[S.chip, form.worksCategory === c && { backgroundColor: ACCENT, borderColor: ACCENT }]} onPress={() => set('worksCategory', c)}>
-                          <Text style={[S.chipText, form.worksCategory === c && { color: '#fff' }]}>{c}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </TRow>
-              </View>
-            )}
-
-            {page === 2 && (
-              <View>
-                <Text style={S.sectionTitle}>Requested Survey</Text>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Date">
-                      <TextInput style={S.input} value={form.inspectionDate} onChangeText={v => set('inspectionDate', v)} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Time">
-                      <TextInput style={S.input} value={form.inspectionTime} onChangeText={v => set('inspectionTime', v)} placeholder="HH:MM" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                </View>
-                <TRow label="Next Operation">
-                  <TextInput style={S.input} value={form.nextOperation} onChangeText={v => set('nextOperation', v)} placeholder="Next planned operation" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <Text style={S.sectionTitle}>Scheduled Visit</Text>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Date">
-                      <TextInput style={S.input} value={form.scheduledDate} onChangeText={v => set('scheduledDate', v)} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <TRow label="Time">
-                      <TextInput style={S.input} value={form.scheduledTime} onChangeText={v => set('scheduledTime', v)} placeholder="HH:MM" placeholderTextColor={colors.textMuted} />
-                    </TRow>
-                  </View>
-                </View>
-                <TRow label="Equipment">
-                  <TextInput style={S.input} value={form.equipment} onChangeText={v => set('equipment', v)} placeholder="Equipment required" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Issued By">
-                  <TextInput style={S.input} value={form.issuedBy} onChangeText={v => set('issuedBy', v)} placeholder="Issued by" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Issue Date">
-                  <TextInput style={S.input} value={form.issueDate} onChangeText={v => set('issueDate', v)} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} />
-                </TRow>
-              </View>
-            )}
-
-            {page === 3 && (
-              <View>
-                <Text style={S.sectionTitle}>Survey Outcome</Text>
-                <TRow label="Surveyed By">
-                  <TextInput style={S.input} value={form.surveyedBy} onChangeText={v => set('surveyedBy', v)} placeholder="Surveyor name" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Surveyed At">
-                  <TextInput style={S.input} value={form.surveyedAt} onChangeText={v => set('surveyedAt', v)} placeholder="Location / area" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <View style={S.switchRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={S.switchLabel}>No Objection</Text>
-                    <Text style={S.switchSub}>Survey results accepted</Text>
-                  </View>
-                  <Switch value={form.noObjection} onValueChange={v => set('noObjection', v)} thumbColor={form.noObjection ? '#22c55e' : '#888'} trackColor={{ true: '#22c55e44', false: '#333' }} />
-                </View>
-                <View style={S.switchRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={S.switchLabel}>Deficiencies Noted</Text>
-                    <Text style={S.switchSub}>Corrections required</Text>
-                  </View>
-                  <Switch value={form.deficienciesNoted} onValueChange={v => set('deficienciesNoted', v)} thumbColor={form.deficienciesNoted ? '#ef4444' : '#888'} trackColor={{ true: '#ef444444', false: '#333' }} />
-                </View>
-                {form.deficienciesNoted && (
-                  <View style={{ marginTop: spacing.sm }}>
-                    <Text style={S.sectionTitle}>Deficiency Details</Text>
-                    {form.deficiencies.map((d, i) => (
-                      <TextInput key={i} style={[S.input, { marginBottom: spacing.xs }]} value={d}
-                        onChangeText={v => { const next = [...form.deficiencies]; next[i] = v; set('deficiencies', next); }}
-                        placeholder={`Deficiency ${i + 1}`} placeholderTextColor={colors.textMuted} />
-                    ))}
-                  </View>
-                )}
-                <TRow label="Received By">
-                  <TextInput style={S.input} value={form.receivedBy} onChangeText={v => set('receivedBy', v)} placeholder="Received by" placeholderTextColor={colors.textMuted} />
-                </TRow>
-                <TRow label="Received Date">
-                  <TextInput style={S.input} value={form.receivedDate} onChangeText={v => set('receivedDate', v)} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} />
-                </TRow>
-              </View>
-            )}
-
-            <View style={{ height: 30 }} />
-          </ScrollView>
-
-          <View style={S.footer}>
-            <TouchableOpacity style={S.footerNav} onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-              <Icon name="arrow-left" size={18} color={page === 1 ? '#444' : colors.textMuted} />
-              <Text style={{ color: page === 1 ? '#444' : colors.textMuted, fontSize: 13 }}>Back</Text>
+          <View style={S.actionBar}>
+            <TouchableOpacity style={S.cancelBtn} onPress={onClose}>
+              <Text style={S.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-            {page < totalPages ? (
-              <TouchableOpacity style={[S.footerBtn, { backgroundColor: ACCENT }]} onPress={() => setPage(p => p + 1)}>
-                <Text style={S.footerBtnText}>Next</Text>
-                <Icon name="arrow-right" size={16} color="#fff" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[S.footerBtn, { backgroundColor: ACCENT }]} onPress={() => onSave(form)}>
-                <Icon name="check" size={16} color="#fff" />
-                <Text style={S.footerBtnText}>Continue to Process Flow</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={[S.saveBtn, { backgroundColor: ACCENT }]} onPress={() => onSave(form)}>
+              <Icon name="content-save" size={15} color="#fff" />
+              <Text style={S.saveBtnText}>Save</Text>
+            </TouchableOpacity>
           </View>
+
+          <ScrollView style={S.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            <Text style={S.docTitle}>Request for Survey Check Form</Text>
+
+            <Row label="Contract No.:">
+              <TextInput style={S.input} value={form.contractNo} onChangeText={v => set('contractNo', v)} placeholder="e.g. CT-001" placeholderTextColor={colors.textMuted} />
+            </Row>
+
+            <Divider />
+            <Text style={S.sectionHead}>To: The Supervisor,</Text>
+
+            <View style={S.attentionRow}>
+              <Text style={S.inlineTxt}>(Attention:</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.attention} onChangeText={v => set('attention', v)} placeholder="attention" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>)</Text>
+            </View>
+            <View style={S.riscRow}>
+              <Text style={S.boldTxt}>RISC No.:</Text>
+              <TextInput style={[S.input, { width: 120 }]} value={form.riscNo} onChangeText={v => set('riscNo', v)} />
+              <Text style={S.boldTxt}>Rev.</Text>
+              <TextInput style={[S.input, { width: 70 }]} value={form.revision} onChangeText={v => set('revision', v)} placeholder="Rev-1" placeholderTextColor={colors.textMuted} />
+            </View>
+
+            <Divider />
+            <Text style={S.worksStatement}>The following <Text style={S.italic}>survey</Text> is expected to be ready for your checking:</Text>
+
+            <View style={S.numberedRow}>
+              <Text style={S.numberedLabel}>(1) Location, portion, chainage, level of <Text style={S.italic}>works</Text>:</Text>
+              <TextInput style={[S.input, { width: '100%' }]} value={form.location} onChangeText={v => set('location', v)} placeholder="Location" placeholderTextColor={colors.textMuted} />
+            </View>
+
+            <View style={S.numberedRow}>
+              <Text style={S.numberedLabel}>(2) Survey to be checked:</Text>
+              <TextInput style={[S.input, S.ta, { width: '100%' }]} value={form.survey} onChangeText={v => set('survey', v)} placeholder="Describe survey..." placeholderTextColor={colors.textMuted} multiline numberOfLines={3} />
+            </View>
+
+            <View style={S.numberedRow}>
+              <Text style={S.numberedLabel}>(3) <Text style={S.italic}>Works Category</Text>:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={S.chipRow}>
+                  {WORKS_CATEGORIES.map(c => (
+                    <TouchableOpacity key={c} style={[S.chip, form.worksCategory === c && S.chipActive]} onPress={() => set('worksCategory', c)}>
+                      <Text style={[S.chipText, form.worksCategory === c && S.chipTextActive]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>at</Text>
+              <TextInput style={[S.input, S.timeInput]} value={form.inspectionTime} onChangeText={v => set('inspectionTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>on</Text>
+              <TextInput style={[S.input, S.dateInput]} value={form.inspectionDate} onChangeText={v => set('inspectionDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+            </View>
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>before proceeding to the next operation of</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.nextOperation} onChangeText={v => set('nextOperation', v)} placeholder="next operation" placeholderTextColor={colors.textMuted} />
+            </View>
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>which is scheduled for</Text>
+              <TextInput style={[S.input, S.timeInput]} value={form.scheduledTime} onChangeText={v => set('scheduledTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.scheduledDate} onChangeText={v => set('scheduledDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+            </View>
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>using the following Equipment:</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.equipment} onChangeText={v => set('equipment', v)} placeholder="Equipment" placeholderTextColor={colors.textMuted} />
+            </View>
+
+            <Divider />
+
+            <Text style={S.sigSectionLabel}><Text style={S.italic}>Issued by the Contractor</Text>:</Text>
+            <View style={S.inlineRow}>
+              <TextInput style={[S.input, S.timeInput]} value={form.issueTime} onChangeText={v => set('issueTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.issueDate} onChangeText={v => set('issueDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.issuedBy} onChangeText={v => set('issuedBy', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+            </View>
+            <Text style={S.sigPlaceholder}>(Signature)</Text>
+
+            <Text style={S.sigSectionLabel}>Received by LS/SSO(E)/SO(E):</Text>
+            <View style={S.inlineRow}>
+              <TextInput style={[S.input, S.timeInput]} value={form.receivedTime} onChangeText={v => set('receivedTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.receivedDate} onChangeText={v => set('receivedDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.receivedBy} onChangeText={v => set('receivedBy', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+            </View>
+            <Text style={S.sigPlaceholder}>(Signature)</Text>
+
+            <Divider />
+            <Text style={S.sectionHead}>To: Site Agent,</Text>
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>(Attention:</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.siteAgentAttention} onChangeText={v => set('siteAgentAttention', v)} placeholder="Site agent attention" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>)</Text>
+            </View>
+            <View style={S.inlineRow}>
+              <Text style={S.inlineTxt}>surveyed at</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.surveyedAt} onChangeText={v => set('surveyedAt', v)} placeholder="Location" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.surveyedBy} onChangeText={v => set('surveyedBy', v)} placeholder="Surveyor name" placeholderTextColor={colors.textMuted} />
+            </View>
+
+            <TouchableOpacity style={S.checkRow} onPress={() => set('noObjection', !form.noObjection)}>
+              <Icon name={form.noObjection ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={form.noObjection ? '#22c55e' : colors.textMuted} />
+              <Text style={S.checkLabel}>There is no objection to you proceeding with the work.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={S.checkRow} onPress={() => set('deficienciesNoted', !form.deficienciesNoted)}>
+              <Icon name={form.deficienciesNoted ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={form.deficienciesNoted ? '#ef4444' : colors.textMuted} />
+              <Text style={S.checkLabel}>The following deficiencies have been noted.</Text>
+            </TouchableOpacity>
+
+            {form.deficiencies.map((d, i) => (
+              <View key={i} style={S.defRow}>
+                <Text style={S.defNum}>{i + 1}.</Text>
+                <TextInput style={[S.input, { flex: 1 }]} value={d} onChangeText={v => handleDeficiencyChange(i, v)} placeholder={`Deficiency ${i + 1}`} placeholderTextColor={colors.textMuted} />
+              </View>
+            ))}
+            <TouchableOpacity style={S.addLineBtn} onPress={() => set('deficiencies', [...form.deficiencies, ''])}>
+              <Icon name="plus" size={16} color={ACCENT} />
+              <Text style={S.addLineBtnText}>Add line</Text>
+            </TouchableOpacity>
+
+            <Text style={S.disclaimer}>The giving of this information and this inspection shall not relieve the Contractor of any liabilities or obligations under this contract.</Text>
+
+            <Divider />
+
+            <Text style={S.sigSectionLabel}>Form returned and signed by</Text>
+            <View style={S.inlineRow}>
+              <TextInput style={[S.input, S.timeInput]} value={form.formReturnedTime} onChangeText={v => set('formReturnedTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.formReturnedDate} onChangeText={v => set('formReturnedDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.formReturnedBy} onChangeText={v => set('formReturnedBy', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+            </View>
+            <Text style={S.sigPlaceholder}>(Signature)</Text>
+
+            <Text style={S.sigSectionLabel}>#Countersigned by the RE</Text>
+            <View style={S.inlineRow}>
+              <TextInput style={[S.input, S.timeInput]} value={form.counterSignedTime} onChangeText={v => set('counterSignedTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.counterSignedDate} onChangeText={v => set('counterSignedDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.counterSignedBy} onChangeText={v => set('counterSignedBy', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+            </View>
+            <Text style={S.sigPlaceholder}>(Signature)</Text>
+
+            <Text style={S.sigSectionLabel}>Form received and signed by the Contractor</Text>
+            <View style={S.inlineRow}>
+              <TextInput style={[S.input, S.timeInput]} value={form.formReceivedTime} onChangeText={v => set('formReceivedTime', v)} placeholder="--:-- --" placeholderTextColor={colors.textMuted} />
+              <TextInput style={[S.input, S.dateInput]} value={form.formReceivedDate} onChangeText={v => set('formReceivedDate', v)} placeholder="dd/mm/yyyy" placeholderTextColor={colors.textMuted} />
+              <Text style={S.inlineTxt}>by</Text>
+              <TextInput style={[S.input, S.flexInput]} value={form.formReceivedBy} onChangeText={v => set('formReceivedBy', v)} placeholder="Name" placeholderTextColor={colors.textMuted} />
+            </View>
+            <Text style={S.sigPlaceholder}>(Signature)</Text>
+
+            <View style={{ height: 60 }} />
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
 }
 
-function TRow({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <View style={{ marginBottom: spacing.md }}>
-      <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 5 }}>{label}</Text>
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{label}</Text>
       {children}
     </View>
   );
 }
 
+function Divider() {
+  return <View style={{ height: 1, backgroundColor: '#1e1e1e', marginVertical: spacing.sm }} />;
+}
+
 const S = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '95%', overflow: 'hidden' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  headerTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  headerSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  tabRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  tab: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
-  body: { flex: 1, padding: spacing.md },
-  sectionTitle: { color: ACCENT, fontSize: 12, fontWeight: '800', letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase', marginTop: spacing.sm },
-  input: { backgroundColor: '#111', color: colors.text, borderRadius: radius.md, borderWidth: 1, borderColor: '#222', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 14 },
-  ta: { minHeight: 80, textAlignVertical: 'top', paddingTop: spacing.sm },
-  chipRow: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },
-  chip: { borderRadius: radius.full, borderWidth: 1, borderColor: '#333', paddingHorizontal: spacing.md, paddingVertical: 6 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '96%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  closeBtn: { padding: 6 },
+  actionBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  cancelBtn: { paddingHorizontal: spacing.md, paddingVertical: 7, backgroundColor: '#1a1a1a', borderRadius: radius.md, borderWidth: 1, borderColor: '#333' },
+  cancelBtnText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.md },
+  saveBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  body: { padding: spacing.md },
+  docTitle: { textAlign: 'center', color: colors.text, fontSize: 15, fontWeight: '900', marginBottom: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#1e1e1e' },
+  sectionHead: { color: colors.text, fontWeight: '700', fontSize: 13, marginBottom: spacing.xs, marginTop: spacing.xs },
+  attentionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: spacing.xs },
+  riscRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs, flexWrap: 'wrap' },
+  boldTxt: { color: colors.text, fontWeight: '700', fontSize: 12 },
+  worksStatement: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
+  italic: { fontStyle: 'italic' },
+  numberedRow: { marginBottom: spacing.sm },
+  numberedLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  inlineRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: spacing.xs },
+  inlineTxt: { color: colors.textMuted, fontSize: 11 },
+  flexInput: { flex: 1, minWidth: 70 },
+  timeInput: { width: 80 },
+  dateInput: { width: 100 },
+  sigSectionLabel: { color: colors.text, fontWeight: '600', fontSize: 12, marginBottom: 4, marginTop: spacing.xs },
+  sigPlaceholder: { color: colors.textMuted, fontSize: 11, textAlign: 'right', marginBottom: spacing.sm },
+  checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: 8 },
+  checkLabel: { color: colors.text, fontSize: 13, flex: 1, lineHeight: 18 },
+  defRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 5 },
+  defNum: { color: colors.textMuted, fontSize: 13, width: 22 },
+  addLineBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.md },
+  addLineBtnText: { color: ACCENT, fontSize: 13, fontWeight: '600' },
+  disclaimer: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginBottom: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#1e1e1e', lineHeight: 16 },
+  input: { backgroundColor: '#111', color: colors.text, borderRadius: radius.md, borderWidth: 1, borderColor: '#222', paddingHorizontal: spacing.sm, paddingVertical: 7, fontSize: 13 },
+  ta: { minHeight: 70, textAlignVertical: 'top', paddingTop: spacing.sm },
+  chipRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  chip: { borderRadius: 20, borderWidth: 1, borderColor: '#333', paddingHorizontal: 10, paddingVertical: 5 },
+  chipActive: { backgroundColor: ACCENT, borderColor: ACCENT },
   chipText: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
-  switchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: radius.md, borderWidth: 1, borderColor: '#222', padding: spacing.sm, marginBottom: spacing.xs },
-  switchLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  switchSub: { color: colors.textMuted, fontSize: 11 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderTopWidth: 1, borderTopColor: '#1a1a1a' },
-  footerNav: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.sm },
-  footerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.lg },
-  footerBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  chipTextActive: { color: '#fff' },
 });
