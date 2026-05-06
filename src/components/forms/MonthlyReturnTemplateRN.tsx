@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, StyleSheet, Alert, Switch } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, FlatList, TextInput, StyleSheet, Alert, Switch, ActivityIndicator, InteractionManager } from 'react-native';
 import { spacing, radius } from '../../theme/spacing';
 import { colors } from '../../theme/colors';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -240,8 +240,16 @@ export default function MonthlyReturnTemplateRN({
 
   const monthDays = useMemo(() => Array.from({ length: 31 }, (_, i) => i + 1), []);
 
+  const [pageLoading, setPageLoading] = useState(false);
+
   const changePage = (p: number) => {
-    if (p >= 1 && p <= totalPages) setCurrentPage(p);
+    if (p >= 1 && p <= totalPages && p !== currentPage) {
+      setPageLoading(true);
+      setCurrentPage(p);
+      InteractionManager.runAfterInteractions(() => {
+        setPageLoading(false);
+      });
+    }
   };
 
   const handleWorkerField = (uid: string, field: keyof WorkerEntry, value: any) => {
@@ -279,16 +287,34 @@ export default function MonthlyReturnTemplateRN({
           </View>
 
           <View style={styles.pagerRow}>
+            <TouchableOpacity 
+              onPress={() => changePage(currentPage - 1)} 
+              disabled={currentPage === 1}
+              style={[styles.arrowBtn, currentPage === 1 && styles.arrowBtnDisabled]}
+            >
+              <Icon name="chevron-left" size={24} color={currentPage === 1 ? '#444' : '#fff'} />
+            </TouchableOpacity>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
               <TouchableOpacity key={p} onPress={() => changePage(p)} style={[styles.pageBtn, currentPage===p && { backgroundColor: '#111' }]}>
                 <Text style={{ color: currentPage===p ? '#fff' : colors.textMuted }}>{p}</Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity 
+              onPress={() => changePage(currentPage + 1)} 
+              disabled={currentPage === totalPages}
+              style={[styles.arrowBtn, currentPage === totalPages && styles.arrowBtnDisabled]}
+            >
+              <Icon name="chevron-right" size={24} color={currentPage === totalPages ? '#444' : '#fff'} />
+            </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body}>
-            {/* Page 1: Metadata */}
-            {currentPage === 1 && (
+          {pageLoading ? (
+            <View style={styles.pageLoader}>
+              <ActivityIndicator color="#0ea5e9" size="large" />
+            </View>
+          ) : currentPage === 1 ? (
+            <ScrollView style={styles.body}>
+              {/* Page 1: Metadata */}
               <View>
                 <Text style={styles.label}>Form Number</Text>
                 <TextInput style={styles.input} value={formData.formNumber} onChangeText={(v)=>setFormData({...formData, formNumber:v})} />
@@ -336,78 +362,91 @@ export default function MonthlyReturnTemplateRN({
                   />
                 </View>
               </View>
-            )}
-
-            {/* Page 2: Worker rows */}
-            {currentPage === 2 && (
-              <View>
-                {formData.workers.map((w) => (
-                  <View key={w.uid} style={styles.rowCard}>
-                    <Text style={styles.rowTitle}>{w.trade || 'New Trade'}</Text>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Trade</Text>
-                        <TextInput placeholder="Trade" style={styles.input} value={w.trade} onChangeText={(v)=>handleWorkerField(w.uid, 'trade', v)} />
-                      </View>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Trade Division</Text>
-                        <TextInput placeholder="Division" style={styles.input} value={w.tradeDivision} onChangeText={(v)=>handleWorkerField(w.uid, 'tradeDivision', v)} />
-                      </View>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          ) : currentPage === 2 ? (
+            <FlatList
+              style={styles.body}
+              data={formData.workers}
+              keyExtractor={item => item.uid}
+              contentContainerStyle={{ paddingBottom: 40 }}
+              renderItem={({ item: w }) => (
+                <View style={styles.rowCard}>
+                  <Text style={styles.rowTitle}>{w.trade || 'New Trade'}</Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Trade</Text>
+                      <TextInput placeholder="Trade" style={styles.input} value={w.trade} onChangeText={(v)=>handleWorkerField(w.uid, 'trade', v)} />
                     </View>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Org</Text>
-                        <TextInput placeholder="Org" style={styles.input} value={w.org} onChangeText={(v)=>handleWorkerField(w.uid, 'org', v)} />
-                      </View>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Code</Text>
-                        <TextInput placeholder="Code" style={styles.input} value={w.code} onChangeText={(v)=>handleWorkerField(w.uid, 'code', v)} />
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Mandays</Text>
-                        <TextInput style={styles.input} value={w.mandays} onChangeText={(v)=>handleWorkerField(w.uid, 'mandays', v)} keyboardType="numeric" />
-                      </View>
-                      <View style={{ flex:1 }}>
-                        <Text style={styles.label}>Hrs/Day</Text>
-                        <TextInput style={styles.input} value={w.duration} onChangeText={(v)=>handleWorkerField(w.uid, 'duration', v)} keyboardType="numeric" />
-                      </View>
-                    </View>
-                    <Text style={styles.label}>Daily Wage Rate (Avg / High / Low)</Text>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                      <TextInput placeholder="Avg" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.average} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, average: v })} keyboardType="numeric" />
-                      <TextInput placeholder="High" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.high} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, high: v })} keyboardType="numeric" />
-                      <TextInput placeholder="Low" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.low} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, low: v })} keyboardType="numeric" />
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Trade Division</Text>
+                      <TextInput placeholder="Division" style={styles.input} value={w.tradeDivision} onChangeText={(v)=>handleWorkerField(w.uid, 'tradeDivision', v)} />
                     </View>
                   </View>
-                ))}
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Org</Text>
+                      <TextInput placeholder="Org" style={styles.input} value={w.org} onChangeText={(v)=>handleWorkerField(w.uid, 'org', v)} />
+                    </View>
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Code</Text>
+                      <TextInput placeholder="Code" style={styles.input} value={w.code} onChangeText={(v)=>handleWorkerField(w.uid, 'code', v)} />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Mandays</Text>
+                      <TextInput style={styles.input} value={w.mandays} onChangeText={(v)=>handleWorkerField(w.uid, 'mandays', v)} keyboardType="numeric" />
+                    </View>
+                    <View style={{ flex:1 }}>
+                      <Text style={styles.label}>Hrs/Day</Text>
+                      <TextInput style={styles.input} value={w.duration} onChangeText={(v)=>handleWorkerField(w.uid, 'duration', v)} keyboardType="numeric" />
+                    </View>
+                  </View>
+                  <Text style={styles.label}>Daily Wage Rate (Avg / High / Low)</Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <TextInput placeholder="Avg" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.average} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, average: v })} keyboardType="numeric" />
+                    <TextInput placeholder="High" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.high} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, high: v })} keyboardType="numeric" />
+                    <TextInput placeholder="Low" style={[styles.input, { flex:1 }]} value={w.dailyWageRate.low} onChangeText={(v)=>handleWorkerField(w.uid, 'dailyWageRate', { ...w.dailyWageRate, low: v })} keyboardType="numeric" />
+                  </View>
+                </View>
+              )}
+              ListFooterComponent={() => (
                 <TouchableOpacity style={styles.addRowBtn} onPress={handleAddRow}><Icon name="plus" size={16} color="#fff" /><Text style={styles.addRowText}>Add Worker Row</Text></TouchableOpacity>
-              </View>
-            )}
-
-            {/* Page 3: Day-by-day inputs (compact horizontal scroll) */}
-            {currentPage === 3 && (
-              <View>
+              )}
+              removeClippedSubviews
+              maxToRenderPerBatch={5}
+              windowSize={3}
+              initialNumToRender={8}
+            />
+          ) : (
+            <FlatList
+              style={styles.body}
+              data={formData.workers}
+              keyExtractor={item => item.uid}
+              contentContainerStyle={{ paddingBottom: 40 }}
+              ListHeaderComponent={() => (
                 <Text style={styles.label}>Day entries (1..31)</Text>
-                {formData.workers.map(w => (
-                  <View key={w.uid} style={styles.dayRow}>
-                    <Text style={styles.rowTitleSmall}>{w.trade || 'Trade'}</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator>
-                      {monthDays.map(day => (
-                        <View key={day} style={styles.dayCell}>
-                          <Text style={styles.dayLabel}>{day}</Text>
-                          <TextInput style={styles.dayInput} value={w.days[day] || ''} onChangeText={(v)=>handleDayChange(w.uid, day, v)} />
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
+              )}
+              renderItem={({ item: w }) => (
+                <View style={styles.dayRow}>
+                  <Text style={styles.rowTitleSmall}>{w.trade || 'Trade'}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator>
+                    {monthDays.map(day => (
+                      <View key={day} style={styles.dayCell}>
+                        <Text style={styles.dayLabel}>{day}</Text>
+                        <TextInput style={styles.dayInput} value={w.days[day] || ''} onChangeText={(v)=>handleDayChange(w.uid, day, v)} />
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+              removeClippedSubviews
+              maxToRenderPerBatch={5}
+              windowSize={3}
+              initialNumToRender={8}
+            />
+          )}
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
@@ -427,8 +466,11 @@ const styles = StyleSheet.create({
   header: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding: spacing.md, borderBottomWidth:1, borderBottomColor:'#222' },
   title: { color: colors.text, fontSize: 16, fontWeight: '800' },
   iconBtn: { padding: 6 },
-  pagerRow: { flexDirection: 'row', padding: spacing.sm, gap: 8, justifyContent: 'center' },
+  pagerRow: { flexDirection: 'row', padding: spacing.sm, gap: 8, justifyContent: 'center', alignItems: 'center' },
+  pageLoader: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 },
   pageBtn: { padding: 6, borderRadius: 20, backgroundColor: 'transparent' },
+  arrowBtn: { padding: 8, borderRadius: 20 },
+  arrowBtnDisabled: { opacity: 0.3 },
   body: { padding: spacing.md },
   label: { color: colors.textMuted, fontSize: 12, marginBottom: 6 },
   input: { backgroundColor: '#111', color: colors.text, padding: 8, borderRadius: 8, borderWidth:1, borderColor:'#222', marginBottom: 10 },

@@ -16,7 +16,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -285,6 +285,14 @@ const extractGeneratedFileAttachments = (content: string): GeneratedFileAttachme
   }));
 };
 
+const stripInlineMarkdown = (text: string): string =>
+  text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/~~(.*?)~~/g, '$1')
+    .trim();
+
 const parseMarkdownTableBlock = (block: string): MarkdownTable | null => {
   const lines = block
     .split('\n')
@@ -297,7 +305,7 @@ const parseMarkdownTableBlock = (block: string): MarkdownTable | null => {
     .replace(/^\|/, '')
     .replace(/\|$/, '')
     .split('|')
-    .map(cell => cell.trim())
+    .map(cell => stripInlineMarkdown(cell.trim()))
     .filter(Boolean);
 
   if (headers.length === 0) return null;
@@ -307,7 +315,7 @@ const parseMarkdownTableBlock = (block: string): MarkdownTable | null => {
       .replace(/^\|/, '')
       .replace(/\|$/, '')
       .split('|')
-      .map(cell => cell.trim()),
+      .map(cell => stripInlineMarkdown(cell.trim())),
   );
 
   return { headers, rows };
@@ -606,6 +614,7 @@ export default function AskAIScreen() {
   const { projectId, projectName } = route.params;
   const { user } = useAuthStore();
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [sessions, setSessions] = useState<AIChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>(TEMP_CHAT_ID);
@@ -1303,13 +1312,15 @@ export default function AskAIScreen() {
           activeOpacity={1}
           onPress={() => setShowHistory(false)}>
           <TouchableOpacity 
-            style={styles.historyOverlayInner} 
+            style={[styles.historyOverlayInner, { paddingRight: insets.right }]} 
             activeOpacity={1}
             onPress={e => e.stopPropagation()}>
-            <SafeAreaView style={styles.historySheet} edges={['top', 'bottom', 'left', 'right']}>
+            <SafeAreaView 
+              style={[styles.historySheet, { paddingTop: insets.top, paddingBottom: insets.bottom }]} 
+              edges={['left', 'right']}>
               <View style={styles.historyHeader}>
                 <Text style={styles.historyTitle}>Chat History</Text>
-                <TouchableOpacity onPress={() => setShowHistory(false)}>
+                <TouchableOpacity onPress={() => setShowHistory(false)} style={styles.historyCloseBtn}>
                   <Icon name="close" size={22} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -1453,10 +1464,16 @@ const markdownStyles = {
   ordered_list: { marginLeft: 8 },
   list_item: { color: colors.text, fontSize: 14, lineHeight: 21 },
   blockquote: {
+    backgroundColor: colors.surface,
     borderLeftWidth: 3,
     borderLeftColor: ACCENT,
     paddingLeft: 8,
+    paddingRight: 8,
+    paddingTop: 6,
+    paddingBottom: 6,
     marginLeft: 0,
+    marginVertical: 4,
+    borderRadius: 4,
     color: colors.textSecondary,
   },
   link: { color: ACCENT },
@@ -1579,7 +1596,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 0,
     borderBottomLeftRadius: 4,
-    width: '95%',
+    width: '100%',
+    maxWidth: '100%',
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
@@ -1724,12 +1742,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#121928',
   },
   tableCell: {
-    minWidth: 132,
-    maxWidth: 220,
+    minWidth: 140,
+    maxWidth: 280,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRightWidth: 1,
     borderRightColor: colors.border,
+    flexShrink: 1,
   },
   tableHeaderText: {
     color: ACCENT,
@@ -1923,6 +1942,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   historyTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  historyCloseBtn: { padding: spacing.xs },
   historyEmpty: { alignItems: 'center', paddingVertical: 60, gap: spacing.sm },
   historyEmptyText: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
   historyEmptySubText: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },

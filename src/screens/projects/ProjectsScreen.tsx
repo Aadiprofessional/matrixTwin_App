@@ -208,19 +208,11 @@ export default function ProjectsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
-            {company && (
-              <View style={styles.companyRow}>
-                <Text style={styles.companyLetter}>{company.name?.charAt(0)?.toUpperCase()}</Text>
-                <Text style={styles.companyName} numberOfLines={1}>{company.name}</Text>
-              </View>
-            )}
-            <Text style={styles.headerTitle}>
-              PROJECTS <Text style={styles.headerAccent}>MATRIX</Text>
-            </Text>
-            <Text style={styles.headerSub}>
-              {projects.length} project{projects.length !== 1 ? 's' : ''}
-            </Text>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings' as any)}>
+              <Image source={require('../../assets/images/assets_logo7.png')} style={styles.companyLogo} resizeMode="contain" tintColor={colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.userName}>{user?.name || 'User'}</Text>
           </View>
           <View style={styles.headerActions}>
             {/* Notification Bell */}
@@ -268,6 +260,9 @@ export default function ProjectsScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Project count below tabs */}
+        <Text style={styles.projectCountText}>{projects.length} project{projects.length !== 1 ? 's' : ''}</Text>
       </View>
 
       <FlatList
@@ -347,23 +342,40 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
-  companyRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xxs },
-  companyLetter: {
-    width: 22, height: 22, borderRadius: radius.sm,
-    backgroundColor: colors.primary,
-    color: colors.white, textAlign: 'center', lineHeight: 22,
-    fontSize: 12, fontWeight: '700', marginRight: spacing.xxs,
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  companyLogo: {
+    width: 32, height: 32,
   },
-  companyName: { color: colors.textSecondary, fontSize: 12 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
-  headerAccent: { color: colors.primary },
-  headerSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  projectCountBadge: {
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  projectCountNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  projectCountLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   bellBtn: {
     position: 'relative',
@@ -413,6 +425,11 @@ const styles = StyleSheet.create({
     color: colors.text, fontSize: 14,
   },
   filterRow: { marginBottom: spacing.xs },
+  projectCountText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
 
   filterTab: {
     paddingHorizontal: spacing.md, paddingVertical: spacing.xxs,

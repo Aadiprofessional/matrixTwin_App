@@ -189,7 +189,7 @@ export default function ProjectDashboardScreen() {
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={20} color={colors.textSecondary} />
-          <Text style={styles.backText}>Projects</Text>
+          <Text style={styles.backText} numberOfLines={1}>{projectName}</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
           <View style={styles.activeBadge}>
@@ -210,14 +210,6 @@ export default function ProjectDashboardScreen() {
             )}
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.hero}>
-        <Text style={styles.heroTag}>// PROJECT</Text>
-        <Text style={styles.heroTitle} numberOfLines={2}>
-          {projectName.toUpperCase()}
-        </Text>
-        <View style={styles.heroDivider} />
       </View>
 
       <ScrollView

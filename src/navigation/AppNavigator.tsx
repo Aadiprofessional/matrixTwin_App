@@ -31,7 +31,7 @@ export type AppStackParamList = {
   Cleansing: { projectId: string; projectName: string; initialFormId?: string };
   Rfi: { projectId: string; projectName: string; initialFormId?: string };
   Team: { projectId: string; projectName: string };
-  Settings: { projectId: string; projectName: string };
+  Settings: { projectId?: string; projectName?: string };
   AskAI: { projectId: string; projectName: string };
   Forms: { projectId: string; projectName: string; initialFormId?: string };
   DigitalTwins: { projectId: string; projectName: string };
