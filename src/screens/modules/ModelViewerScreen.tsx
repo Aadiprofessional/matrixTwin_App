@@ -26,7 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AppStackParamList } from '../../navigation/AppNavigator';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { getViewerToken, getDigitalTwinModel, getProjectModels, getAllModels } from '../../api/digitalTwins';
+import { getViewerToken } from '../../api/digitalTwins';
 import { getFreshViewToken } from '../../utils/bimfaceTokenApi';
 
 type ModelViewerScreenProps = NativeStackScreenProps<AppStackParamList, 'ModelViewer'>;
@@ -226,69 +226,17 @@ export default function ModelViewerScreen({ route, navigation }: ModelViewerScre
   const [hasTriedFallbackToken, setHasTriedFallbackToken] = useState(false);
   const [isFetchingFallbackToken, setIsFetchingFallbackToken] = useState(false);
 
-  // Load available models if no modelId is provided (similar to website implementation)
+  // Skip API model lookups (endpoints return 404) and go straight to default fileId
   useEffect(() => {
-    const loadAvailableModels = async () => {
-      if (initialModelId) {
-        // If modelId was provided in route params, use it directly
-        console.log('Using provided modelId from route params:', initialModelId);
-        setWorkingModelId(initialModelId);
-        setIsLoadingModels(false);
-        return;
-      }
-
-      try {
-        let availableModels: any[] = [];
-
-        // First try to get models by project if projectId is available
-        if (projectId) {
-          console.log('No modelId provided, loading available models for projectId:', projectId);
-          try {
-            availableModels = await getProjectModels(projectId);
-          } catch (projectError) {
-            console.warn('Failed to load models by projectId, falling back to getAllModels:', projectError);
-            // Fall through to getAllModels
-          }
-        }
-
-        // If no models found by project ID, fetch all models
-        if (!availableModels || availableModels.length === 0) {
-          console.log('Fetching all available models...');
-          availableModels = await getAllModels();
-        }
-        
-        if (availableModels && availableModels.length > 0) {
-          const firstModel = availableModels[0];
-          const modelIdToUse = firstModel.id;
-          console.log(`Using first available model with id: ${modelIdToUse}`);
-          setWorkingModelId(modelIdToUse);
-
-          const firstModelFileId =
-            firstModel.fileId ||
-            firstModel.file_id ||
-            firstModel.file_id_value ||
-            firstModel.file_id_number;
-
-          if (firstModelFileId) {
-            setFallbackFileId(String(firstModelFileId));
-          }
-        } else {
-          console.warn('No models available from API, falling back to default BIMFACE fileId:', DEFAULT_BIMFACE_FILE_ID);
-          setFallbackFileId(DEFAULT_BIMFACE_FILE_ID);
-          setError(null);
-        }
-      } catch (err) {
-        console.error('Error loading available models:', err);
-        console.warn('Falling back to default BIMFACE fileId due to model loading error:', DEFAULT_BIMFACE_FILE_ID);
-        setFallbackFileId(DEFAULT_BIMFACE_FILE_ID);
-        setError(null);
-      } finally {
-        setIsLoadingModels(false);
-      }
-    };
-
-    loadAvailableModels();
-  }, [initialModelId, projectId]);
+    if (initialModelId) {
+      setWorkingModelId(initialModelId);
+      setIsLoadingModels(false);
+      return;
+    }
+    // No modelId provided — use the known-working default fileId immediately
+    setFallbackFileId(DEFAULT_BIMFACE_FILE_ID);
+    setIsLoadingModels(false);
+  }, [initialModelId]);
 
   // Fetch view token using local API
   // Use workingModelId to fetch view token from backend
@@ -325,28 +273,9 @@ export default function ModelViewerScreen({ route, navigation }: ModelViewerScre
       setIsFetchingFallbackToken(true);
 
       try {
-        let fileIdToUse = fallbackFileId;
+        // Use fallbackFileId or the known default — skip getDigitalTwinModel API call
+        const fileIdToUse = fallbackFileId || DEFAULT_BIMFACE_FILE_ID;
 
-        // Attempt to fetch model metadata to find fileId (some APIs return file_id)
-        if (!fileIdToUse && workingModelId) {
-          const model = await getDigitalTwinModel(workingModelId);
-          const fileIdFromModel =
-            (model as any).fileId ||
-            (model as any).file_id ||
-            (model as any).file_id_value ||
-            (model as any).file_id_number;
-
-          if (fileIdFromModel) {
-            fileIdToUse = String(fileIdFromModel);
-          }
-        }
-
-        if (!fileIdToUse) {
-          console.warn('No fileId found from model/API; using default BIMFACE fileId fallback:', DEFAULT_BIMFACE_FILE_ID);
-          fileIdToUse = DEFAULT_BIMFACE_FILE_ID;
-        }
-
-        console.log('Attempting fallback fresh token fetch using fileId:', fileIdToUse);
         const data = await getFreshViewToken(fileIdToUse);
 
         if (data && data.viewToken) {

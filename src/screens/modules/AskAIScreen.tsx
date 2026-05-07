@@ -1050,34 +1050,46 @@ export default function AskAIScreen() {
                 ) : null}
                 {tables.length > 0 ? (
                   <View style={styles.tableList}>
-                    {tables.map((table, tableIndex) => (
-                      <View key={`${item.id}-table-${tableIndex}`} style={styles.tableCard}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                          <View>
-                            <View style={[styles.tableRow, styles.tableHeaderRow]}>
-                              {table.headers.map((header, headerIndex) => (
-                                <View key={`${item.id}-th-${tableIndex}-${headerIndex}`} style={styles.tableCell}>
-                                  <Text style={styles.tableHeaderText}>{header}</Text>
-                                </View>
-                              ))}
-                            </View>
-                            {table.rows.map((row, rowIndex) => (
-                              <View
-                                key={`${item.id}-tr-${tableIndex}-${rowIndex}`}
-                                style={[styles.tableRow, rowIndex % 2 === 0 ? styles.tableAltRow : null]}>
-                                {row.map((cell, cellIndex) => (
+                    {tables.map((table, tableIndex) => {
+                      // Compute column widths based on the longest content in each column
+                      const colWidths = table.headers.map((header, colIdx) => {
+                        const maxLen = table.rows.reduce(
+                          (max, row) => Math.max(max, (row[colIdx] || '-').length),
+                          header.length,
+                        );
+                        return Math.max(80, Math.min(240, maxLen * 8 + 24));
+                      });
+                      return (
+                        <View key={`${item.id}-table-${tableIndex}`} style={styles.tableCard}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                            <View>
+                              <View style={[styles.tableRow, styles.tableHeaderRow]}>
+                                {table.headers.map((header, headerIndex) => (
                                   <View
-                                    key={`${item.id}-td-${tableIndex}-${rowIndex}-${cellIndex}`}
-                                    style={styles.tableCell}>
-                                    <Text style={styles.tableCellText}>{cell || '-'}</Text>
+                                    key={`${item.id}-th-${tableIndex}-${headerIndex}`}
+                                    style={[styles.tableCell, { width: colWidths[headerIndex] }]}>
+                                    <Text style={styles.tableHeaderText}>{header}</Text>
                                   </View>
                                 ))}
                               </View>
-                            ))}
-                          </View>
-                        </ScrollView>
-                      </View>
-                    ))}
+                              {table.rows.map((row, rowIndex) => (
+                                <View
+                                  key={`${item.id}-tr-${tableIndex}-${rowIndex}`}
+                                  style={[styles.tableRow, rowIndex % 2 === 0 ? styles.tableAltRow : null]}>
+                                  {row.map((cell, cellIndex) => (
+                                    <View
+                                      key={`${item.id}-td-${tableIndex}-${rowIndex}-${cellIndex}`}
+                                      style={[styles.tableCell, { width: colWidths[cellIndex] ?? 80 }]}>
+                                      <Text style={styles.tableCellText}>{cell || '-'}</Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              ))}
+                            </View>
+                          </ScrollView>
+                        </View>
+                      );
+                    })}
                   </View>
                 ) : null}
                 {formsRows.length > 0 ? (
@@ -1254,14 +1266,14 @@ export default function AskAIScreen() {
         <View style={styles.modeBar}>
           <TouchableOpacity
             style={[styles.modeBtn, selectedMode === 'docx' ? styles.modeBtnActive : null]}
-            onPress={() => setSelectedMode('docx')}>
+            onPress={() => setSelectedMode(prev => (prev === 'docx' ? 'text' : 'docx'))}>
             <Text style={[styles.modeBtnText, selectedMode === 'docx' ? styles.modeBtnTextActive : null]}>
               Generate DOCX
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.modeBtn, selectedMode === 'xlsx' ? styles.modeBtnActive : null]}
-            onPress={() => setSelectedMode('xlsx')}>
+            onPress={() => setSelectedMode(prev => (prev === 'xlsx' ? 'text' : 'xlsx'))}>
             <Text style={[styles.modeBtnText, selectedMode === 'xlsx' ? styles.modeBtnTextActive : null]}>
               Generate XLSX
             </Text>
@@ -1355,8 +1367,7 @@ export default function AskAIScreen() {
                           {new Date(session.lastUpdatedAt).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
-                          })} ·{' '}
-                          {session.messages.filter(message => message.sender === 'user').length} messages
+                          })}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1742,13 +1753,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#121928',
   },
   tableCell: {
-    minWidth: 140,
-    maxWidth: 280,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRightWidth: 1,
     borderRightColor: colors.border,
-    flexShrink: 1,
   },
   tableHeaderText: {
     color: ACCENT,

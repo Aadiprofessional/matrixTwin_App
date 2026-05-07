@@ -28,7 +28,17 @@ export default function TeamScreen() {
 
   useEffect(() => {
     getProjectMembers(projectId)
-      .then(data => setMembers(Array.isArray(data) ? data : []))
+      .then(data => {
+        if (!Array.isArray(data)) { setMembers([]); return; }
+        // API returns ProjectMember[] with a nested `user` object — flatten to TeamMember[]
+        setMembers(
+          data.map((m: any) =>
+            m.user && typeof m.user === 'object'
+              ? { ...m.user, role: m.role || m.user.role || 'user' }
+              : (m as TeamMember),
+          ),
+        );
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);
@@ -42,7 +52,7 @@ export default function TeamScreen() {
             <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
           ) : (
             <Text style={[styles.avatarLetter, { color: rc }]}>
-              {item.name.charAt(0).toUpperCase()}
+              {item.name?.charAt(0)?.toUpperCase() ?? '?'}
             </Text>
           )}
         </View>
