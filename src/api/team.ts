@@ -85,3 +85,30 @@ export const getRoles = (): Promise<RolePermissions[]> =>
 // GET /roles/:roleId
 export const getRoleById = (roleId: string): Promise<RolePermissions> =>
   client.get(`/roles/${roleId}`).then(r => r.data);
+
+// --- Role & User management (matches web roleService) ---
+
+export interface CustomRole {
+  id: number;
+  name: string;
+  description: string;
+  created_by: string;
+  created_at: string;
+  permissions?: any[];
+}
+
+// GET /auth/roles
+export const getCustomRoles = (): Promise<CustomRole[]> =>
+  client.get('/auth/roles').then(r => r.data);
+
+// DELETE /auth/roles/:roleId
+export const deleteCustomRole = (roleId: number, adminUid: string): Promise<any> =>
+  client.delete(`/auth/roles/${roleId}`, { data: { admin_uid: adminUid } }).then(r => r.data);
+
+// PATCH /auth/users/role
+export const updateUserRole = (adminUid: string, userId: string, newRole: string): Promise<any> =>
+  client.patch('/auth/users/role', { admin_uid: adminUid, user_id: userId, new_role: newRole }).then(r => r.data);
+
+// PATCH /auth/users/role-dynamic
+export const assignRoleToUser = (payload: { admin_uid: string; user_id: string; new_role: string }): Promise<any> =>
+  client.patch('/auth/users/role-dynamic', payload).then(r => r.data);

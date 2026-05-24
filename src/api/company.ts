@@ -107,6 +107,10 @@ export const rejectJoinRequest = (companyId: string, joinRequestId: string): Pro
 export const getCompany = (companyId: string): Promise<any> =>
   client.get(`/companies/${companyId}`).then(r => r.data);
 
+// DELETE /companies/members/:userId  (same endpoint as web companyService.removeCompanyMember)
+export const removeCompanyMember = (userId: string): Promise<any> =>
+  client.delete(`/companies/members/${userId}`).then(r => r.data);
+
 // GET /companies/members
 export const getMyCompanyMembers = (): Promise<any[]> =>
   client.get('/companies/members').then(r => r.data);
