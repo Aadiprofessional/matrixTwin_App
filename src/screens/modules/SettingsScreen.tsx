@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { WebView } from 'react-native-webview';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import DocumentPicker from 'react-native-document-picker';
 import { useAuthStore } from '../../store/authStore';
 import ModuleShell from './ModuleShell';
 import { colors } from '../../theme/colors';
@@ -265,22 +267,91 @@ export default function SettingsScreen() {
   };
 
   const handleUploadPress = (uploadType: UploadType) => {
-    const isImage = uploadType === 'signature' || uploadType === 'pic';
+    if (uploadType === 'pic' || uploadType === 'signature') {
+      Alert.alert(
+        'Select Image',
+        undefined,
+        [
+          {
+            text: 'Camera',
+            onPress: async () => {
+              const result = await launchCamera({ mediaType: 'photo', quality: 0.8, saveToPhotos: false });
+              if (!result.didCancel && !result.errorCode && result.assets?.[0]?.uri) {
+                const asset = result.assets[0];
+                await uploadFile(uploadType, asset.uri!, asset.fileName || 'photo.jpg', asset.type || 'image/jpeg');
+              } else if (result.errorCode) {
+                Alert.alert('Camera Error', result.errorMessage || 'Could not access camera.');
+              }
+            },
+          },
+          {
+            text: 'Photo Library',
+            onPress: async () => {
+              const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
+              if (!result.didCancel && !result.errorCode && result.assets?.[0]?.uri) {
+                const asset = result.assets[0];
+                await uploadFile(uploadType, asset.uri!, asset.fileName || 'photo.jpg', asset.type || 'image/jpeg');
+              } else if (result.errorCode) {
+                Alert.alert('Library Error', result.errorMessage || 'Could not access photo library.');
+              }
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    } else {
+      DocumentPicker.pick({ type: [DocumentPicker.types.allFiles] })
+        .then(async (results) => {
+          const file = results[0];
+          await uploadFile(uploadType, file.uri, file.name || 'document', file.type || 'application/octet-stream');
+        })
+        .catch((e) => {
+          if (!DocumentPicker.isCancel(e)) {
+            Alert.alert('Error', 'Failed to select file.');
+          }
+        });
+    }
+  };
+
+  const handleDeleteAccount = () => {
     Alert.alert(
-      `Upload ${uploadType.charAt(0).toUpperCase() + uploadType.slice(1)}`,
-      isImage
-        ? 'Image picker will open here. Please ensure the required library is installed.'
-        : 'Document picker will open here. Please ensure the required library is installed.',
+      'Delete Account',
+      'Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'View Docs',
-          onPress: () =>
-            Linking.openURL(
-              isImage
-                ? 'https://github.com/react-native-image-picker/react-native-image-picker'
-                : 'https://github.com/rnmods/react-native-document-picker',
-            ),
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirm Deletion',
+              'This will permanently delete your account and all associated data. Type DELETE to confirm.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Confirm Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    const token = getToken();
+                    if (!token) return;
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/auth/me`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body?.message || body?.error || 'Failed to delete account');
+                      }
+                      logout();
+                    } catch (e) {
+                      Alert.alert('Error', (e as Error).message || 'Failed to delete account. Please try again.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
         },
       ],
     );
@@ -532,11 +603,15 @@ export default function SettingsScreen() {
             ))}
           </View>
 
-          {/* ── SIGN OUT ─────────────────────────────────────────────── */}
+          {/* ── SIGN OUT & DELETE ACCOUNT ────────────────────────────── */}
           <View style={styles.signOutWrap}>
             <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout} activeOpacity={0.8}>
               <Icon name="logout" size={17} color="#ef4444" />
               <Text style={styles.signOutText}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount} activeOpacity={0.8}>
+              <Icon name="delete-forever" size={17} color="#ef4444" />
+              <Text style={styles.deleteAccountText}>Delete Account</Text>
             </TouchableOpacity>
           </View>
 
@@ -865,6 +940,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   signOutText: {
+    color: '#ef4444',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  deleteAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1a0606',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ef444433',
+    paddingVertical: 14,
+    marginTop: 10,
+  },
+  deleteAccountText: {
     color: '#ef4444',
     fontSize: 15,
     fontWeight: '600',

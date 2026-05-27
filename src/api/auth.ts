@@ -44,3 +44,7 @@ export const signup = (payload: SignupPayload): Promise<SignupResponse> =>
 // GET /auth/me — returns current user profile
 export const getCurrentUser = (): Promise<AuthUser> =>
   client.get<AuthUser>('/auth/me').then(r => r.data);
+
+// DELETE /auth/me — permanently deletes the authenticated user's account
+export const deleteAccount = (): Promise<void> =>
+  client.delete('/auth/me').then(() => undefined);
